@@ -1,71 +1,34 @@
 import Mathlib.Logic.Function.Basic
 import Mathlib.Data.SetLike.Basic
 import RSK.Basic
+import RSK.OrderedList
 
 set_option relaxedAutoImplicit true
 
 abbrev Grid := List (List Nat)
 
-def IsOrderedList (list : List Nat) : Prop :=
-  match list with
-  | [] => True
-  | _ :: [] => True
-  | a :: b :: tail => a ≤ b ∧ IsOrderedList (b :: tail)
+def op_lt (a b : Option Nat) :=
+  match a, b with
+  | some a, some b => a < b
+  | _, _ => True
 
-theorem ord_tail_ord (h : IsOrderedList (a :: tail)) : IsOrderedList (tail) := by
-  cases tail with
-  | nil => exact h
-  | cons b tail2 =>
-    exact h.right
+def op_le (a b : Option Nat) :=
+  match a, b with
+  | some a, some b => a ≤ b
+  | _, _ => True
 
-theorem ord_front_ord (h : IsOrderedList list) : IsOrderedList list.dropLast := by
-  match list with
-  | [] => simp[IsOrderedList]
-  | a :: [] => simp[IsOrderedList]
-  | a :: b :: [] => simp[IsOrderedList]
-  | a :: b :: c :: tail =>
-    have ih₂ := ord_front_ord (ord_tail_ord h)
-    exact And.imp_right (fun a ↦ ih₂) h
-
-theorem ord_append_ord (h_ord : IsOrderedList list) (n : Nat) (h_lt : list.getLast? ≤ n) :
-  IsOrderedList (list ++ [n]) := by
-  match h_list : list with
-  | [] => simp[IsOrderedList]
-  | a :: [] =>
-    simp only [List.getLast?_singleton] at h_lt
-    simp only [List.cons_append, List.nil_append, IsOrderedList, and_true, ge_iff_le]
-    exact h_lt
-  | a :: b :: tail2 =>
-    have h_lt₂ : (b :: tail2).getLast? ≤ n := by
-      exact le_of_eq_of_le rfl h_lt
-    have hi := ord_append_ord (ord_tail_ord h_ord) n h_lt₂
-    simp only [List.cons_append, IsOrderedList]
-    constructor
-    · exact h_ord.left
-    · exact hi
-
-theorem ord_last_ge (h: IsOrderedList (a :: tail)) : a ≤ (a::tail).getLast (by exact List.cons_ne_nil a tail) := by
-  cases tail with
-  | nil => simp
-  | cons b tail =>
-    have hi := ord_last_ge (ord_tail_ord h)
-    grind[h.left]
-
-structure OrderedList where
-  l : List Nat
-  lord : IsOrderedList l
-
-def bmpshft_row (row : List Nat) (n : Nat) : List Nat × Option Nat :=
+-- insert into a row
+def bmpshft_row (row : List Nat) (k : Nat) : List Nat × Option Nat :=
   match row with
-  | .nil => ([n], none)
+  | .nil => ([k], none)
   | a :: tail =>
-    if n < a then
-      (n :: tail, some a)
+    if k < a then
+      (k :: tail, some a)
     else
-      let (btail, bumped) := bmpshft_row tail n
+      let (btail, bumped) := bmpshft_row tail k
       (a :: btail, bumped)
 
-
+-- insertion into a row is ordered
 theorem ord_bmpshft_row (hlist_ord : IsOrderedList list) (n : Nat)
   : IsOrderedList (bmpshft_row list n).1 := by
   cases list with
@@ -78,50 +41,28 @@ theorem ord_bmpshft_row (hlist_ord : IsOrderedList list) (n : Nat)
       have tail_n_ord := ord_bmpshft_row (ord_tail_ord hlist_ord) n
       grind[bmpshft_row, IsOrderedList]
 
-
--- def bmpshft_row (row : OrderedList) (n : Nat)
---  : OrderedList × Option Nat :=
---   ⟨⟨(bmpshft_row_h row.l n).fst, ord_bmpshft_row row.lord n⟩,
---    (bmpshft_row_h row.l n).snd⟩
-
-
+-- row is not nil after insertion
 theorem bmpshft_row_neq_nil (list : List Nat) (n : Nat)
   : (bmpshft_row list n).fst ≠ [] := by
   cases h: list with
   | nil => simp[bmpshft_row, bmpshft_row]
   | cons a tail => grind[bmpshft_row]
 
-
--- theorem max_bmpshft_row (row : List Nat) (h_ord : IsOrderedList row) (n : Nat)
---   : n ≤ (bmpshft_row ⟨row, h_ord⟩ n).fst.l.getLast (bmpshft_row_neq_nil ⟨row, h_ord⟩ n) := by
---   induction row with
---   | nil => simp[bmpshft_row, bmpshft_row_h]
---   | cons a tail ih =>
---     if hn_lq_a : n < a then
---       simp[bmpshft_row, bmpshft_row_h, hn_lq_a]
---       have h₂ := last_ge h_ord
---       grind
---     else
---       simp[bmpshft_row, bmpshft_row_h, hn_lq_a]
---       have htail_ord := ord_tail_ord h_ord
---       grind[bmpshft_row]
-
+-- The bumped out k' is larger than the inserted number
 theorem bmpshft_row_bmp_gt (row : List Nat) (n : Nat) :
-  match (bmpshft_row row n).2 with
-  | none => true
-  | some a => n < a := by
+  op_lt (some n) (bmpshft_row row n).2 := by
   induction row with
   | nil =>
-    simp[bmpshft_row]
+    simp[bmpshft_row, op_lt]
   | cons a tail ih =>
     if hn_lt_a : n < a then
-      simp[bmpshft_row, hn_lt_a]
+      simp[bmpshft_row, op_lt, hn_lt_a]
     else
       simp only [bmpshft_row, hn_lt_a, ↓reduceIte]
       simp only at ih
       exact ih
 
-
+-- The bumped out k' is larger than the first number in the row
 theorem bmpshft_row_fst_lt (row : List Nat) (n : Nat) :
   match (bmpshft_row row n).2 with
   | none => true
@@ -141,69 +82,111 @@ theorem bmpshft_row_fst_lt (row : List Nat) (n : Nat) :
         rw [h_tail] at h₀
         exact Nat.lt_of_le_of_lt ha_lq_n h₀
 
-theorem dropLastSmall (list : List Nat) (h_notnil : list ≠ []) : list.dropLast.length < list.length := by
-  match list with
-  | [] => contradiction
-  | a :: [] => simp
-  | a :: b :: tail =>
-    have ih := dropLastSmall (b :: tail) (by exact List.cons_ne_nil b tail)
-    rw[List.dropLast, List.length, List.length]
-    · omega
-    · intro h
-      contradiction
-
-
-def bmpshft_inv (h_ord : IsOrderedList row) (a : Option Nat) (h_notnil : row ≠ []) (h_leq : nat_lt_option (row.head h_notnil) a) : List Nat × Nat :=
-  match a with
-  | none => ⟨row.dropLast, row.getLast h_notnil⟩
-  | some a =>
-    if hn_lt_a : row.getLast h_notnil < a then
-      ⟨row.dropLast ++ [a], row.getLast h_notnil⟩
-    else
-      have h_ord₂ := ord_front_ord h_ord
-      have h_notnil₂ : row.dropLast ≠ [] := by
-        match h_row : row with
-        | [] => exact h_notnil.elim
-        | n :: [] =>
-          rw [nat_lt_option, List.head] at h_leq
-          rw [Not, List.getLast] at hn_lt_a
-          contradiction
-        | b :: c :: tail =>
-          exact List.getLast?_isSome.mp rfl
-      have h_leq₂ : nat_lt_option (row.dropLast.head h_notnil₂) a := by grind
-      have ⟨nrow, n⟩ := bmpshft_inv h_ord₂ a h_notnil₂ h_leq₂
-      ⟨nrow ++ [row.getLast h_notnil], n⟩
-  termination_by row.length decreasing_by
-    exact dropLastSmall row h_notnil
-
 theorem helper₁ (h_ord : IsOrderedList row) : row.dropLast.getLast? ≤ row.getLast? := by
   match h_row: row with
-  | [] => simp
-  | a :: [] => simp
+  | [] => trivial
+  | a :: [] => trivial
   | a :: b :: [] => exact h_ord.left
   | a :: b :: c :: tail =>
     have hi := helper₁ (ord_tail_ord h_ord)
     grind
 
+structure bmpshft_row_as
 
-theorem ord_bmpshft_inv (h_ord : IsOrderedList row) (a : Option Nat) (h_notnil : row ≠ []) (h_leq : (row.head h_notnil) < a) :
-  IsOrderedList (bmpshft_inv h_ord a h_notnil h_leq).1 := by
-  match a with
-  | none =>
-    rw[bmpshft_inv]
-    simp[ord_front_ord h_ord]
-  | some a =>
-    if hn_lt_a : row.getLast h_notnil < a then
-      rw[bmpshft_inv]
-      simp[hn_lt_a]
-      exact ord_append_ord (ord_front_ord h_ord) a (by
-        have h₀ := helper₁ h_ord
-
-        rw [option_lq_nat.eq_def]
-
-
-      sorry)
+-- An inversion of bmpshft
+def bmpshft_row_inv (h_ord : IsOrderedList row) (h_notnil : row ≠ []) (k' : Option Nat) (h_leq : op_lt (row.head h_notnil) k') : List Nat × Nat :=
+  let last := row.getLast h_notnil
+  match k' with
+  -- If noting was bumped out, the last element is k
+  | none => ⟨row.dropLast, last⟩
+  | some k' =>
+    if hl_lt_k' : last < k' then
+      -- If the last number is smaller than k', it must be k
+      ⟨row.dropLast ++ [k'], last⟩
     else
+      -- Now for the induction part.
+      -- We first obtain the theorems for induction
+      have h_ord₂ := ord_front_ord h_ord
+      have h_notnil₂ : row.dropLast ≠ [] := by
+        dsimp only [last] at hl_lt_k'
+        match h_row : row with
+        | [] => exact h_notnil.elim
+        | n :: [] =>
+          contradiction
+        | b :: c :: tail =>
+          exact List.getLast?_isSome.mp rfl
+      have h_leq₂ : op_lt (row.dropLast.head h_notnil₂) k' := by
+        grind
+      have ⟨nrow, k⟩ := bmpshft_row_inv h_ord₂ h_notnil₂ k' h_leq₂
+      ⟨nrow ++ [last], k⟩
+  termination_by row.length decreasing_by
+    exact drop_last_lt row h_notnil
+
+-- If we reinsert an element k'. The last element of the new list can become no bigger than k'
+def bmpshft_row_inv_last (h_ord : IsOrderedList row) (h_notnil : row ≠ []) (k' : Nat) (h_leq : op_lt (row.head h_notnil) k') :
+  (bmpshft_row_inv h_ord h_notnil (some k') h_leq).fst.getLast? ≤ max (row.getLast h_notnil) k' := by
+  let last := row.getLast h_notnil
+  if hl_lt_k' : last < k' then
+    rw[bmpshft_row_inv.eq_def]
+    simp[hl_lt_k', last]
+  else
+    rw[bmpshft_row_inv.eq_def]
+    simp[hl_lt_k', last]
+
+theorem option_le_trans {a b c : Option Nat} (h₁ : a ≤ b) (h₂ : b ≤ c) : a ≤ c := by
+  match a, b, c with
+  | none, _, _ => exact Option.none_le
+  | some a, none, _ => contradiction
+  | some a, some b, none => contradiction
+  | some a, some b, some c =>
+    refine Option.some_le_some.mpr ?_
+    exact Nat.le_trans h₁ h₂
+
+theorem ord_bmpshft_row_inv (h_ord : IsOrderedList row) (h_notnil : row ≠ []) (k' : Option Nat) (h_leq : op_lt (row.head h_notnil) k') :
+  IsOrderedList (bmpshft_row_inv h_ord h_notnil k' h_leq).1 := by
+  let last := row.getLast h_notnil
+  match k' with
+  | none =>
+    rw[bmpshft_row_inv.eq_def]
+    simp[ord_front_ord h_ord]
+  | some k' =>
+    if hl_lt_k' : last < k' then
+      rw[bmpshft_row_inv]
+      simp only [hl_lt_k', ↓reduceDIte, last]
+      dsimp only [last] at hl_lt_k'
+      exact ord_append_ord (ord_front_ord h_ord) k' (by grind[helper₁])
+    else
+      rw[bmpshft_row_inv]
+      simp only [hl_lt_k', ↓reduceDIte, last]
+      apply ord_append_ord
+      · apply ord_bmpshft_row_inv
+      · -- Note that this is a copy of the code in bmpshft_row_inv and should be refactored.
+        have h_ord₂ := ord_front_ord h_ord
+        have h_notnil₂ : row.dropLast ≠ [] := by
+          dsimp only [last] at hl_lt_k'
+          match h_row : row with
+          | [] => exact h_notnil.elim
+          | n :: [] =>
+            contradiction
+          | b :: c :: tail =>
+            exact List.getLast?_isSome.mp rfl
+        have h_leq₂ : op_lt (row.dropLast.head h_notnil₂) k' := by
+          grind
+        apply option_le_trans
+        · exact bmpshft_row_inv_last h_ord₂ h_notnil₂ k' h_leq₂
+        · refine Option.some_le_some.mpr ?_
+          refine Nat.max_le_of_le_of_le ?_ ?_
+          · have h₁ := helper₁ h_ord
+            grind
+          · grind
+  termination_by row.length decreasing_by
+    exact drop_last_lt row h_notnil
+
+def bmpshft_row' (h_ord : IsOrderedList row) (k : Nat) : IsOrderedList
+
+
+
+
 
 
 
@@ -211,9 +194,9 @@ theorem ord_bmpshft_inv (h_ord : IsOrderedList row) (a : Option Nat) (h_notnil :
 
 def bmpshft (syt : Grid) (n : Nat) : Grid × Nat :=
   match syt with
-  | .nil => ([[n]], 0)
+  | .nil => ([[k']], 0)
   | row :: tail =>
-    let (new_row, bumped) := bmpshft_row row n
+    let (new_row, bumped) := bmpshft_row row k'
     match bumped with
     | none => (new_row :: tail, 0)
     | some a =>
