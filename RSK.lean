@@ -20,7 +20,7 @@ def op_le (a b : Option Nat) :=
 -- insert into a row
 def bmpshft_row (row : List Nat) (k : Nat) : List Nat × Option Nat :=
   match row with
-  | .nil => ([k], none)
+  | [] => ([k], none)
   | a :: tail =>
     if k < a then
       (k :: tail, some a)
@@ -64,20 +64,18 @@ theorem bmpshft_row_bmp_gt (row : List Nat) (n : Nat) :
 
 -- The bumped out k' is larger than the first number in the row
 theorem bmpshft_row_fst_lt (row : List Nat) (n : Nat) :
-  match (bmpshft_row row n).2 with
-  | none => true
-  | some a => ((bmpshft_row row n).1.head (bmpshft_row_neq_nil row n)) < a := by
+  op_lt ((bmpshft_row row n).1.head (bmpshft_row_neq_nil row n)) (bmpshft_row row n).2 := by
   match h_row : row with
-  | [] => simp[bmpshft_row]
+  | [] => trivial
   | head :: tail =>
     if hn_lt_a : n < head then
-      simp[bmpshft_row, hn_lt_a]
+      simp[op_lt, bmpshft_row, hn_lt_a]
     else
       have ha_lq_n : head ≤ n := by exact Nat.le_of_not_lt hn_lt_a
       simp only [bmpshft_row, hn_lt_a, ↓reduceIte, List.head_cons]
       have h₀ := bmpshft_row_bmp_gt tail n
       match h_tail : (bmpshft_row tail n).snd with
-      | none => simp
+      | none => trivial
       | some a =>
         rw [h_tail] at h₀
         exact Nat.lt_of_le_of_lt ha_lq_n h₀
@@ -91,7 +89,18 @@ theorem helper₁ (h_ord : IsOrderedList row) : row.dropLast.getLast? ≤ row.ge
     have hi := helper₁ (ord_tail_ord h_ord)
     grind
 
-structure bmpshft_row_as
+structure bmpshft_row_in where
+  row : List Nat
+  h_ord : IsOrderedList row
+  k : Nat
+
+structure bmpshft_row_out where
+  row : List Nat
+  h_ord : IsOrderedList row
+  k' : Option Nat
+  h_notnil : row ≠ []
+  h_leq : op_lt (row.head h_notnil) k'
+
 
 -- An inversion of bmpshft
 def bmpshft_row_inv (h_ord : IsOrderedList row) (h_notnil : row ≠ []) (k' : Option Nat) (h_leq : op_lt (row.head h_notnil) k') : List Nat × Nat :=
@@ -182,21 +191,52 @@ theorem ord_bmpshft_row_inv (h_ord : IsOrderedList row) (h_notnil : row ≠ []) 
   termination_by row.length decreasing_by
     exact drop_last_lt row h_notnil
 
-def bmpshft_row' (h_ord : IsOrderedList row) (k : Nat) : IsOrderedList
+def bmpshft_row' (var : bmpshft_row_in) : bmpshft_row_out :=
+  let ⟨row, h_ord, k⟩ := var
+  ⟨(bmpshft_row row k).fst,
+    ord_bmpshft_row h_ord k,
+    (bmpshft_row row k).snd,
+    bmpshft_row_neq_nil row k,
+    bmpshft_row_fst_lt row k⟩
+
+def bmpshft_row_inv' (var : bmpshft_row_out) : bmpshft_row_in :=
+  let ⟨_, h_ord, h_notnil, k', h_leq⟩ := var
+  ⟨(bmpshft_row_inv h_ord k' h_notnil h_leq).fst,
+   ord_bmpshft_row_inv  h_ord k' h_notnil h_leq,
+   (bmpshft_row_inv h_ord k' h_notnil h_leq).snd⟩
+
+theorem bmpshft_row_bi : Function.Bijective bmpshft_row' := by
+  apply Function.bijective_iff_has_inverse.mpr
+  have is_inv : Function.LeftInverse bmpshft_row_inv' bmpshft_row' ∧
+        Function.RightInverse bmpshft_row_inv' bmpshft_row' := by
+    constructor
+    · refine Function.leftInverse_iff_comp.mpr ?_
+      refine Eq.symm (funext ?_)
+      intro var
+      let ⟨row, h_ord, k⟩ := var
+      dsimp only [id_eq, Function.comp_apply]
+      rw[bmpshft_row']
+      simp[bmpshft_row, bmpshft_row_inv', bmpshft_row_inv]
+      match row with
+      | [] => simp[bmpshft_row, bmpshft_row_inv', bmpshft_row_inv]
+      | a :: tail =>
+        if hk_lt_a : k < a then
+          simp[bmpshft_row, bmpshft_row_inv', bmpshft_row_inv]
+          simp[hk_lt_a]
+          rw[bmpshft_row_inv]
+          simp[hk_lt_a]
 
 
 
 
 
+  exact Exists.intro bmpshft_row_inv' is_inv
 
-
-
-
-def bmpshft (syt : Grid) (n : Nat) : Grid × Nat :=
+def bmpshft (syt : Grid) (k : Nat) : Grid × Nat :=
   match syt with
-  | .nil => ([[k']], 0)
+  | .nil => ([[k]], 0)
   | row :: tail =>
-    let (new_row, bumped) := bmpshft_row row k'
+    let (new_row, bumped) := bmpshft_row row k
     match bumped with
     | none => (new_row :: tail, 0)
     | some a =>
