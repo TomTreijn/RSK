@@ -30,28 +30,24 @@ def bmpshft_row (var : bmpshft_row_in) : bmpshft_row_out :=
   let ⟨row, h_ord, k⟩ := var
   let f_gt_k := fun (j : Nat) ↦ j > k
   let i := row.findIdx? (· > k)
+  have i_eq : i = row.findIdx? (· > k) := by rfl
   match hi : i with
   | none =>
+    -- Add to the end
     let row' := row ++ [k]
     let k' := none
     have h_ord' : IsOrderedList row' := by
       dsimp only [row']
       apply ord_append_ord
       · exact h_ord
-      · by_contra hP
-        dsimp only [i] at hi
-        match hrl : row.getLast? with
-        | none =>
-          rw [Not, hrl] at hP
-          exact hP Option.none_le
+      · match hrl : row.getLast? with
+        | none => exact Option.none_le
         | some a =>
-          have hinrow : a ∈ row := List.mem_of_getLast? hrl
-          have not_gt_k := List.findIdx?_eq_none_iff.mp hi
-          have h₀ := not_gt_k a hinrow
-          rw [hrl, Option.some_le_some, Not] at hP
-          have ha_gt_k : a > k := Nat.lt_of_not_le hP
-          rw[decide_eq_false_iff_not] at h₀
-          contradiction
+          have left_le := List.findIdx?_eq_none_iff.mp (i_eq.symm)
+          have ha_in : a ∈ row := List.mem_of_getLast? hrl
+          have ha_leq := left_le a ha_in
+          rw[decide_eq_false_iff_not, Not] at ha_leq
+          exact Option.some_le_some.mpr (Nat.le_of_not_lt ha_leq)
     have h_notnil' : row' ≠ [] := List.concat_ne_nil k row
     have h_leq' : op_lt (row'.head h_notnil') k' := by
       dsimp only [op_lt, k']
