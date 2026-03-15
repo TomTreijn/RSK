@@ -7,16 +7,6 @@ set_option relaxedAutoImplicit true
 
 abbrev Grid := List (List Nat)
 
-def op_lt (a b : Option Nat) :=
-  match a, b with
-  | some a, some b => a < b
-  | _, _ => True
-
-def op_le (a b : Option Nat) :=
-  match a, b with
-  | some a, some b => a ≤ b
-  | _, _ => True
-
 -- insert into a row
 def bmpshft_row (row : List Nat) (k : Nat) : List Nat × Option Nat :=
   match row with
@@ -101,6 +91,16 @@ structure bmpshft_row_out where
   h_notnil : row ≠ []
   h_leq : op_lt (row.head h_notnil) k'
 
+theorem drop_last_lt (list : List Nat) (h_notnil : list ≠ []) : list.dropLast.length < list.length := by
+  match list with
+  | [] => contradiction
+  | a :: [] => simp
+  | a :: b :: tail =>
+    have ih := drop_last_lt (b :: tail) (by exact List.cons_ne_nil b tail)
+    rw[List.dropLast, List.length, List.length]
+    · omega
+    · intro h
+      contradiction
 
 -- An inversion of bmpshft
 def bmpshft_row_inv (h_ord : IsOrderedList row) (h_notnil : row ≠ []) (k' : Option Nat) (h_leq : op_lt (row.head h_notnil) k') : List Nat × Nat :=
@@ -219,12 +219,17 @@ theorem bmpshft_row_bi : Function.Bijective bmpshft_row' := by
       simp[bmpshft_row, bmpshft_row_inv', bmpshft_row_inv]
       match row with
       | [] => simp[bmpshft_row, bmpshft_row_inv', bmpshft_row_inv]
-      | a :: tail =>
+      | a :: [] => grind[bmpshft_row, bmpshft_row_inv', bmpshft_row_inv]
+      | a :: b :: tail =>
         if hk_lt_a : k < a then
           simp[bmpshft_row, bmpshft_row_inv', bmpshft_row_inv]
           simp[hk_lt_a]
           rw[bmpshft_row_inv]
           simp[hk_lt_a]
+          have ha_le_last := Nat.le_trans h_ord.left (ord_front_le_last (ord_tail_ord h_ord))
+          have hlast_lq_a := Nat.not_lt.mpr ha_le_last
+          simp[hlast_lq_a]
+
 
 
 
