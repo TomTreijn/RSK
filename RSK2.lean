@@ -13,6 +13,9 @@ structure bmpshft_row_in where
   h_ord : IsOrderedList row
   k : Nat
 
+theorem bmpshft_row_in_eq {in₁ in₂ : bmpshft_row_in} : (in₁.row = in₂.row ∧ in₁.k = in₂.k) ↔ in₁ = in₂ := by
+  grind[bmpshft_row_in]
+
 structure bmpshft_row_out where
   row : List Nat
   h_ord : IsOrderedList row
@@ -105,6 +108,9 @@ def bmpshft_row (var : bmpshft_row_in) : bmpshft_row_out :=
     have h_leq' : op_lt (row'.head h_notnil') k' := sorry
     ⟨row', h_ord', k', h_notnil', h_leq'⟩
 
+#eval! bmpshft_row ⟨[1, 2, 4, 5], (by simp[IsOrderedList]), 3⟩
+#eval! bmpshft_row ⟨[1, 2, 4, 5], (by simp[IsOrderedList]), 6⟩
+
 def bmpshft_row_inv (var : bmpshft_row_out) : bmpshft_row_in :=
   let ⟨row', h_ord', k', h_notnil', h_leq'⟩ := var
   match k' with
@@ -119,57 +125,84 @@ def bmpshft_row_inv (var : bmpshft_row_out) : bmpshft_row_in :=
     have h_ord : IsOrderedList row := by
       apply ord_ins_ord
       · exact h_ord'
-      ·
-  sorry
+      · sorry
+    ⟨row, h_ord, k⟩
+
+theorem bmpshft_row_bi : Function.Bijective bmpshft_row := by
+  apply Function.bijective_iff_has_inverse.mpr
+  have is_inv : Function.LeftInverse bmpshft_row_inv bmpshft_row ∧
+        Function.RightInverse bmpshft_row_inv bmpshft_row := by
+    constructor
+    · refine Function.leftInverse_iff_comp.mpr ?_
+      refine Eq.symm (funext ?_)
+      intro var
+      let ⟨row, h_ord, k⟩ := var
+      dsimp only [id_eq, Function.comp_apply]
+      rw[bmpshft_row]
+      split
+      · case h_1 hi =>
+          rw[bmpshft_row_inv]
+          grind
+      · case h_2 j hi =>
+          rw[bmpshft_row_inv]
+          have h_eq_some := List.findIdx?_eq_some_iff_getElem.mp hi
+          have h_j_lt_len := h_eq_some.choose
+          have equality : (List.findIdx (fun x ↦ decide (x > row[j])) (row.set j k) - 1) = k := by
+            sorry
+          simp_rw[equality]
+          sorry
+
+    · refine Function.leftInverse_iff_comp.mpr ?_
+      refine Eq.symm (funext ?_)
+      intro var
+      let ⟨row', h_ord', k', h_notnil', h_leq'⟩ := var
+      dsimp only [id_eq, Function.comp_apply]
+      rw[bmpshft_row_inv.eq_def]
+      simp only [gt_iff_lt]
+      split
+      · case h_1 =>
+          -- k' = none. So proof that k is larger than all other numbers in row.
+          rw [bmpshft_row]
+          sorry
+      · case h_2 =>
+          rw [bmpshft_row]
+          sorry
 
 
-
-#eval! bmpshft_row ⟨[1, 2, 4, 5], (by simp[IsOrderedList]), 3⟩
-#eval! bmpshft_row ⟨[1, 2, 4, 5], (by simp[IsOrderedList]), 6⟩
-
--- theorem ord_bmpshft_row (h_ord : IsOrderedList row) :
---   ∀ k : Nat, IsOrderedList (bmpshft_row row k).fst := by
---   intro k
---   rw[bmpshft_row]
---   let i := row.findFinIdx? (· > k)
---   match hi : i with
---   | none =>
---     dsimp[hi, i]
+  exact ⟨bmpshft_row_inv, is_inv⟩
 
 
+def bmpshft (syt : Grid) (k : Nat) : Grid × Nat :=
+  match syt with
+  | .nil => ([[k]], 0)
+  | row :: tail =>
+    let (new_row, bumped) := bmpshft_row row k
+    match bumped with
+    | none => (new_row :: tail, 0)
+    | some a =>
+      let (new_grid, row_bumped) := bmpshft tail a
+      (new_row :: new_grid, row_bumped + 1)
 
+#eval bmpshft [[1, 3, 4], [5, 6]] 2
 
--- def bmpshft (syt : Grid) (k : Nat) : Grid × Nat :=
---   match syt with
---   | .nil => ([[k]], 0)
---   | row :: tail =>
---     let (new_row, bumped) := bmpshft_row row k
---     match bumped with
---     | none => (new_row :: tail, 0)
---     | some a =>
---       let (new_grid, row_bumped) := bmpshft tail a
---       (new_row :: new_grid, row_bumped + 1)
+def RSK (σ : List Nat) : Grid × Grid :=
+  match σ with
+  | .nil => ([], [])
+  | n :: σ_tail =>
+    let (P, Q) := RSK σ_tail
+    let (P_new, i) := bmpshft P n
+    let trash := Q.flatten.length
+    let Q_new := match Q[i]?  with
+      | none => Q ++ [[trash]]
+      | some row => Q.set i (row ++ [trash])
+    (P_new, Q_new)
 
--- #eval bmpshft [[1, 3, 4], [5, 6]] 2
-
--- def RSK (σ : List Nat) : Grid × Grid :=
---   match σ with
---   | .nil => ([], [])
---   | n :: σ_tail =>
---     let (P, Q) := RSK σ_tail
---     let (P_new, i) := bmpshft P n
---     let trash := Q.flatten.length
---     let Q_new := match Q[i]?  with
---       | none => Q ++ [[trash]]
---       | some row => Q.set i (row ++ [trash])
---     (P_new, Q_new)
-
--- #eval RSK [2, 7, 1, 8, 11, 10, 4, 5, 0, 9, 3, 6].reverse =
---   ([[0, 3, 5, 6],
---     [1, 4, 8, 9],
---     [2, 7, 10],
---     [11]],
---    [[0, 1, 3, 4],
---     [2, 5, 7, 9],
---     [6, 10, 11],
---     [8]])
+#eval RSK [2, 7, 1, 8, 11, 10, 4, 5, 0, 9, 3, 6].reverse =
+  ([[0, 3, 5, 6],
+    [1, 4, 8, 9],
+    [2, 7, 10],
+    [11]],
+   [[0, 1, 3, 4],
+    [2, 5, 7, 9],
+    [6, 10, 11],
+    [8]])
