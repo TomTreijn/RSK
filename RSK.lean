@@ -25,7 +25,6 @@ structure bmpshft_row_out where
 -- insert into a row
 def bmpshft_row (var : bmpshft_row_in) : bmpshft_row_out :=
   let ⟨row, h_wkinc, k⟩ := var
-  let f_gt_k := fun (j : Nat) ↦ j > k
   let i := row.findIdx? (· > k)
   have i_eq : i = row.findIdx? (· > k) := by rfl
   match hi : i with
@@ -67,7 +66,7 @@ def bmpshft_row (var : bmpshft_row_in) : bmpshft_row_out :=
       exact Nat.le_of_not_lt h_lt
     have h_notnil : row ≠ [] := by
       by_contra hP
-      have h₀ : [].findIdx? (f_gt_k: ℕ → Bool) = none := List.findIdx?_nil
+      have h₀ : [].findIdx? (· > k) = none := List.findIdx?_nil
       dsimp only [i] at hi
       rw [←hP] at h₀
       rw [hi] at h₀
@@ -233,7 +232,8 @@ theorem bmpshft_row_bi : Function.Bijective bmpshft_row := by
                   rw [←h_succj] at hi_lt_len
                   have hi_le_j : i ≤ j := Nat.lt_one_add_iff.mp hi_lt_len
                   exact Nat.lt_of_le_of_ne hi_le_j hi_eq_j
-                rw [List.getElem_set_of_ne (Ne.symm (Nat.ne_of_lt hi_lt_j)) k hi_lt_len] at hx_getElem
+                have := Ne.symm (Nat.ne_of_lt hi_lt_j)
+                rw [List.getElem_set_of_ne this k hi_lt_len] at hx_getElem
                 have hx_le_k : x ≤ k := by
                   have hleft := hleft_lt_k i hi_lt_j
                   rw[hx_getElem] at hleft
@@ -276,24 +276,24 @@ theorem bmpshft_row_bi : Function.Bijective bmpshft_row := by
       refine Eq.symm (funext ?_)
       intro ⟨row', h_wkinc', k', h_notnil', h_leq'⟩
       rw [Function.comp_apply, bmpshft_row_inv.eq_def]
-      simp only [id_eq, gt_iff_lt]
+      simp only [id_eq]
       split
       -- If k' = none
       · case h_1 k' _ _ =>
         rw [bmpshft_row]
-        have none_find_none : List.findIdx? (fun x ↦ decide (x > row'.getLast h_notnil')) row'.dropLast = none := by
+        have none_find_none : List.findIdx? ((· > row'.getLast h_notnil')) row'.dropLast = none :=
+        by
           refine List.findIdx?_eq_none_iff.mpr ?_
           intro x hx_in_row'
           have ⟨i, hi_lt_len, hx_getElem⟩ := List.mem_iff_getElem.mp hx_in_row'
-          rw[←List.getElem_length_sub_one_eq_getLast]
-          · rw[List.getElem_dropLast hi_lt_len] at hx_getElem
-            rw[←hx_getElem]
-            rw [List.length_dropLast] at hi_lt_len
-            rw[decide_eq_false_iff_not, Nat.not_gt_eq]
-            have row_len_lt : row'.length - 1 < row'.length := by
-              refine Nat.sub_one_lt ?_
-              exact Nat.ne_zero_of_lt (Nat.add_lt_of_lt_sub hi_lt_len)
-            exact wkinc_wkinc2.mp h_wkinc' i (row'.length - 1) hi_lt_len row_len_lt
+          have row_len_lt : row'.length - 1 < row'.length := by
+            have := List.length_pos_iff.mpr h_notnil'; omega
+          have hi_lt_len' : i < row'.length - 1 := List.length_dropLast ▸ hi_lt_len
+          rw[←List.getElem_length_sub_one_eq_getLast row_len_lt]
+          rw[List.getElem_dropLast hi_lt_len] at hx_getElem
+          rw[←hx_getElem]
+          rw[decide_eq_false_iff_not, Nat.not_gt_eq]
+          exact wkinc_wkinc2.mp h_wkinc' i (row'.length - 1) hi_lt_len' row_len_lt
         -- Should be replaced with a variant of rw[k'_find_k]
         split
         · case h_1 =>
@@ -304,13 +304,12 @@ theorem bmpshft_row_bi : Function.Bijective bmpshft_row := by
             contradiction
       -- if k' = some
       · case h_2 k' h_leq' =>
-        let j' := (List.findIdx (. ≥ k') row' - 1)
-        have hj'_eq : (List.findIdx (. ≥ k') row' - 1) = j' := by rfl
+        let j' := (List.findIdx (· ≥ k') row' - 1)
+        have hj'_eq : (List.findIdx (· ≥ k') row' - 1) = j' := by rfl
         simp_rw [hj'_eq]
         rw [bmpshft_row]
         simp only
-
-        have find_gt_zero : List.findIdx (. ≥ k') row' > 0 := by
+        have find_gt_zero : List.findIdx (· ≥ k') row' > 0 := by
           apply Nat.zero_lt_of_ne_zero
           by_contra h_cont
           rw[List.findIdx_eq (List.length_pos_iff.mpr h_notnil')] at h_cont
@@ -318,16 +317,13 @@ theorem bmpshft_row_bi : Function.Bijective bmpshft_row := by
           have h_cont_left := h_cont.left
           rw[decide_eq_true_iff] at h_cont_left
           omega
-
         have hj'_le_len : j' < row'.length := by
           rw[←hj'_eq]
-          have hfind_le_len := List.findIdx_le_length
-          omega
-
-        have j_find_j : List.findIdx? (fun x ↦ decide (x > row'[j'])) (row'.set j' k') = some j' := by
+          exact Nat.sub_one_lt_of_le find_gt_zero List.findIdx_le_length
+        have j_find_j : List.findIdx? (· > row'[j']) (row'.set j' k') = some j' := by
           rw[List.findIdx?_eq_some_iff_getElem]
           simp_rw[List.length_set]
-          if hfind_eq_len : List.findIdx (. ≥ k') row' = row'.length then
+          if hfind_eq_len : List.findIdx (· ≥ k') row' = row'.length then
             have none_gt := List.findIdx_eq_length.mp hfind_eq_len
             apply Exists.intro
             · constructor
@@ -343,7 +339,8 @@ theorem bmpshft_row_bi : Function.Bijective bmpshft_row := by
                 · exact Ne.symm (Nat.ne_of_lt hji)
             · exact hj'_le_len
           else
-            have find_eq_succ_j : List.findIdx (. ≥ k') row' = j' + 1 := (Nat.sub_eq_iff_eq_add find_gt_zero).mp hj'_eq
+            have find_eq_succ_j : List.findIdx (· ≥ k') row' = j' + 1 :=
+              (Nat.sub_eq_iff_eq_add find_gt_zero).mp hj'_eq
             have succ_j_lt_len : j' + 1 < row'.length := by
               rw[←find_eq_succ_j]
               exact Nat.lt_of_le_of_ne List.findIdx_le_length hfind_eq_len
