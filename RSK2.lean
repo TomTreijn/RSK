@@ -10,12 +10,12 @@ abbrev Grid := List (List Nat)
 
 structure bmpshft_row_in where
   row : List Nat
-  h_ord : IsOrderedList row
+  h_wkinc : IsWeakInc row
   k : Nat
 
 structure bmpshft_row_out where
   row : List Nat
-  h_ord : IsOrderedList row
+  h_wkinc : IsWeakInc row
   k' : Option Nat
   h_notnil : row ≠ []
   h_leq : op_lt (row.head h_notnil) k'
@@ -24,7 +24,7 @@ structure bmpshft_row_out where
 
 -- insert into a row
 def bmpshft_row (var : bmpshft_row_in) : bmpshft_row_out :=
-  let ⟨row, h_ord, k⟩ := var
+  let ⟨row, h_wkinc, k⟩ := var
   let f_gt_k := fun (j : Nat) ↦ j > k
   let i := row.findIdx? (· > k)
   have i_eq : i = row.findIdx? (· > k) := by rfl
@@ -33,10 +33,10 @@ def bmpshft_row (var : bmpshft_row_in) : bmpshft_row_out :=
     -- Add to the end
     let row' := row ++ [k]
     let k' := none
-    have h_ord' : IsOrderedList row' := by
+    have h_wkinc' : IsWeakInc row' := by
       dsimp only [row']
-      apply ord_append_ord
-      · exact h_ord
+      apply wkinc_append_wkinc
+      · exact h_wkinc
       · match hrl : row.getLast? with
         | none => exact Option.none_le
         | some a =>
@@ -48,7 +48,7 @@ def bmpshft_row (var : bmpshft_row_in) : bmpshft_row_out :=
     have h_notnil' : row' ≠ [] := List.concat_ne_nil k row
     have h_leq' : op_lt (row'.head h_notnil') k' := by
       dsimp only [op_lt, k']
-    ⟨row', h_ord', k', h_notnil', h_leq'⟩
+    ⟨row', h_wkinc', k', h_notnil', h_leq'⟩
   | some j =>
     have h_eq_some := List.findIdx?_eq_some_iff_getElem.mp hi
     have h_j_lt_len := h_eq_some.choose
@@ -79,10 +79,10 @@ def bmpshft_row (var : bmpshft_row_in) : bmpshft_row_out :=
       have row'len : (row.set (↑j) k).length = row.length := List.length_set
       have row'len_not_zero : (row.set (↑j) k).length > 0 := by rw[row'len]; exact h_len_gt_zero
       exact List.ne_nil_of_length_pos row'len_not_zero
-    have h_ord' : IsOrderedList row' := by
+    have h_wkinc' : IsWeakInc row' := by
       dsimp only [row']
-      apply ord_ins_ord
-      · exact h_ord
+      apply wkinc_ins_wkinc
+      · exact h_wkinc
       · dsimp only [i] at hi
         constructor
         · if hj : j = 0 then
@@ -101,7 +101,7 @@ def bmpshft_row (var : bmpshft_row_in) : bmpshft_row_out :=
             rw[List.getElem?_eq_getElem hsuccj]
             rw[op_le_some]
             have hrow_j_lt_succj : row[j] ≤ row[j+1] :=
-              ord_ord.mp h_ord j (j+1) (lt_add_one j) hsuccj
+              wkinc_wkinc2.mp h_wkinc j (j+1) (lt_add_one j) hsuccj
             rw[←hk'] at hrow_j_lt_succj
             apply Nat.le_of_lt
             exact Nat.lt_of_lt_of_le hk_lt_k' hrow_j_lt_succj
@@ -123,15 +123,15 @@ def bmpshft_row (var : bmpshft_row_in) : bmpshft_row_out :=
         · have h : j > 0 :=
             by exact Nat.lt_of_sub_eq_succ hj
           exact Nat.ne_zero_of_lt h
-    ⟨row', h_ord', k', h_notnil', h_leq'⟩
+    ⟨row', h_wkinc', k', h_notnil', h_leq'⟩
 
-#eval! bmpshft_row ⟨[1, 2, 4, 5], (by simp[IsOrderedList]), 3⟩
-#eval! bmpshft_row ⟨[1, 2, 4, 5], (by simp[IsOrderedList]), 6⟩
+#eval! bmpshft_row ⟨[1, 2, 4, 5], (by simp[IsWeakInc]), 3⟩
+#eval! bmpshft_row ⟨[1, 2, 4, 5], (by simp[IsWeakInc]), 6⟩
 
 def bmpshft_row_inv (var : bmpshft_row_out) : bmpshft_row_in :=
-  let ⟨row', h_ord', k', h_notnil', h_leq'⟩ := var
+  let ⟨row', h_wkinc', k', h_notnil', h_leq'⟩ := var
   match k' with
-  | none => ⟨row'.dropLast, ord_front_ord h_ord', row'.getLast h_notnil'⟩
+  | none => ⟨row'.dropLast, wkinc_front_wkinc h_wkinc', row'.getLast h_notnil'⟩
   | some k' =>
     let i := row'.findIdx (· ≥ k') - 1
     have hi : i = row'.findIdx (· ≥ k') - 1 := by rfl
@@ -139,15 +139,51 @@ def bmpshft_row_inv (var : bmpshft_row_out) : bmpshft_row_in :=
       grind
     let row := row'.set i k'
     let k := row'[i]
-    have h_ord : IsOrderedList row := by
-      apply ord_ins_ord
-      · exact h_ord'
-      · sorry
-    ⟨row, h_ord, k⟩
+    have h_wkinc : IsWeakInc row := by
+      apply wkinc_ins_wkinc
+      · exact h_wkinc'
+      · have hfind_gt_zero : row'.findIdx (· ≥ k') > 0 := by
+          by_contra hP
+          have his_zero := Nat.eq_zero_of_not_pos hP
+          rw[List.findIdx_eq] at his_zero
+          · have hge := his_zero.left
+            rw [decide_eq_true_iff] at hge
+            rw [op_lt_some, List.head_eq_getElem] at h_leq'
+            omega
+          · exact List.length_pos_iff.mpr h_notnil'
+        have hfind_i : i + 1 = row'.findIdx (· ≥ k') := Nat.sub_add_cancel hfind_gt_zero
+        have sub_i_lt_len : i - 1 < row'.length := Nat.sub_lt_of_lt hi_lt_len
+        rw[(List.getElem?_eq_some_getElem_iff (sub_i_lt_len)).mpr True.intro, op_le_some]
+        if hfind : row'.findIdx (· ≥ k') = row'.length then
+          constructor
+          · simp_rw[List.findIdx_eq_length, decide_eq_false_iff_not] at hfind
+            apply Or.intro_right
+            have lt := hfind row'[i-1] (List.getElem_mem sub_i_lt_len)
+            exact Nat.le_of_not_ge lt
+          · rw[hfind] at hi
+            rw[hi, Nat.sub_one_add_one, List.getElem?_eq_none_iff.mpr (Nat.le_refl row'.length)]
+            · exact op_le_none_r
+            · exact Nat.ne_zero_of_lt hi_lt_len
+        else
+          have hsucc_i_lt_len : i + 1 < row'.length := by
+            grind
+          have hfind_eq := (List.findIdx_eq hsucc_i_lt_len).mp (Eq.symm hfind_i)
+          constructor
+          · apply Or.intro_right
+            have le := hfind_eq.right (i-1) (Nat.sub_lt_succ i 1)
+            rw [decide_eq_false_iff_not] at le
+            exact Nat.le_of_not_ge le
+          · rw[(List.getElem?_eq_some_getElem_iff (hsucc_i_lt_len)).mpr True.intro, op_le_some]
+            have le := hfind_eq.left
+            rw[decide_eq_true_iff] at le
+            omega
+    ⟨row, h_wkinc, k⟩
 
 
-#eval! bmpshft_row_inv ⟨[1, 2, 4, 5], (by simp[IsOrderedList]), none, (by simp), (op_lt_none_r)⟩
-#eval! bmpshft_row_inv ⟨[1, 2, 4, 5], (by simp[IsOrderedList]), some 5, (by simp), (by rw[op_lt_some]; decide)⟩
+example {a : Nat} (h : ¬a > 0) : (a = 0) := Nat.eq_zero_of_not_pos h
+example {a b : Nat} (h : a ≤ b) : (b ≥ a) := by exact String.Pos.Raw.mk_le_mk.mp h
+#eval! bmpshft_row_inv ⟨[1, 2, 4, 5], (by simp[IsWeakInc]), none, (by simp), (op_lt_none_r)⟩
+#eval! bmpshft_row_inv ⟨[1, 2, 4, 5], (by simp[IsWeakInc]), some 5, (by simp), (by rw[op_lt_some]; decide)⟩
 
 theorem bmpshft_row_bi : Function.Bijective bmpshft_row := by
   apply Function.bijective_iff_has_inverse.mpr
@@ -158,7 +194,7 @@ theorem bmpshft_row_bi : Function.Bijective bmpshft_row := by
     · refine Function.leftInverse_iff_comp.mpr ?_
       refine Eq.symm (funext ?_)
       intro var
-      let ⟨row, h_ord, k⟩ := var
+      let ⟨row, h_wkinc, k⟩ := var
       dsimp only [id_eq, Function.comp_apply]
       rw[bmpshft_row]
       split
@@ -209,7 +245,10 @@ theorem bmpshft_row_bi : Function.Bijective bmpshft_row := by
               rw [List.findIdx_eq]
               constructor
               · rw[decide_eq_true_eq, List.getElem_set_ne]
-                · sorry
+                · have hsuccj_lt_len : 1 + j < row.length := by
+                    rw[List.length_set] at h_succj
+                    omega
+                  exact wkinc_wkinc2.mp h_wkinc j (1+j) (lt_one_add j) hsuccj_lt_len
                 · rw[Nat.add_comm]
                   exact Nat.ne_add_one j
               · grind
@@ -235,7 +274,7 @@ theorem bmpshft_row_bi : Function.Bijective bmpshft_row := by
     -- right inverse
     · refine Function.rightInverse_iff_comp.mpr ?_
       refine Eq.symm (funext ?_)
-      intro ⟨row', h_ord', k', h_notnil', h_leq'⟩
+      intro ⟨row', h_wkinc', k', h_notnil', h_leq'⟩
       rw [Function.comp_apply, bmpshft_row_inv.eq_def]
       simp only [id_eq, gt_iff_lt]
       split
@@ -254,7 +293,7 @@ theorem bmpshft_row_bi : Function.Bijective bmpshft_row := by
             have row_len_lt : row'.length - 1 < row'.length := by
               refine Nat.sub_one_lt ?_
               exact Nat.ne_zero_of_lt (Nat.add_lt_of_lt_sub hi_lt_len)
-            exact ord_ord.mp h_ord' i (row'.length - 1) hi_lt_len row_len_lt
+            exact wkinc_wkinc2.mp h_wkinc' i (row'.length - 1) hi_lt_len row_len_lt
         -- Should be replaced with a variant of rw[k'_find_k]
         split
         · case h_1 =>
@@ -299,7 +338,7 @@ theorem bmpshft_row_bi : Function.Bijective bmpshft_row := by
               · intro j hji
                 rw[decide_eq_true_iff]
                 rw[List.getElem_set_ne]
-                · have lt : row'[j] ≤ row'[j'] := ord_ord.mp h_ord' j j' hji hj'_le_len
+                · have lt : row'[j] ≤ row'[j'] := wkinc_wkinc2.mp h_wkinc' j j' hji hj'_le_len
                   refine Nat.not_lt.mpr lt
                 · exact Ne.symm (Nat.ne_of_lt hji)
             · exact hj'_le_len
@@ -320,7 +359,7 @@ theorem bmpshft_row_bi : Function.Bijective bmpshft_row := by
               · intro j hji
                 rw[decide_eq_true_iff, List.getElem_set_ne]
                 · refine Nat.not_lt.mpr ?_
-                  exact ord_ord.mp h_ord' j j' hji hj'_le_len
+                  exact wkinc_wkinc2.mp h_wkinc' j j' hji hj'_le_len
                 · exact Ne.symm (Nat.ne_of_lt hji)
             · exact hj'_le_len
         split
@@ -347,58 +386,3 @@ theorem bmpshft_row_bi : Function.Bijective bmpshft_row := by
 example (a b : Nat) (h_1 : a ≤ b) (h_2 : ¬a = b) : (a < b):= by exact Nat.lt_of_le_of_ne h_1 h_2
 example (a b : Nat) (h_1 : some a = some b) : (a = b) := by exact ENat.coe_inj.mp h_1
 example (a b : Nat) : (a < b) = (b > a) := by exact Eq.propIntro (fun a ↦ a) fun a ↦ a
-
-    · refine Function.leftInverse_iff_comp.mpr ?_
-      refine Eq.symm (funext ?_)
-      intro var
-      let ⟨row', h_ord', k', h_notnil', h_leq'⟩ := var
-      dsimp only [id_eq, Function.comp_apply]
-      rw[bmpshft_row_inv.eq_def]
-      simp only [gt_iff_lt]
-      split
-      · case h_1 =>
-          -- k' = none. So proof that k is larger than all other numbers in row.
-          rw [bmpshft_row]
-          sorry
-      · case h_2 =>
-          rw [bmpshft_row]
-          sorry
-
-
-  exact ⟨bmpshft_row_inv, is_inv⟩
-
-
--- def bmpshft (syt : Grid) (k : Nat) : Grid × Nat :=
---   match syt with
---   | .nil => ([[k]], 0)
---   | row :: tail =>
---     let (new_row, bumped) := bmpshft_row row k
---     match bumped with
---     | none => (new_row :: tail, 0)
---     | some a =>
---       let (new_grid, row_bumped) := bmpshft tail a
---       (new_row :: new_grid, row_bumped + 1)
-
--- #eval bmpshft [[1, 3, 4], [5, 6]] 2
-
--- def RSK (σ : List Nat) : Grid × Grid :=
---   match σ with
---   | .nil => ([], [])
---   | n :: σ_tail =>
---     let (P, Q) := RSK σ_tail
---     let (P_new, i) := bmpshft P n
---     let trash := Q.flatten.length
---     let Q_new := match Q[i]?  with
---       | none => Q ++ [[trash]]
---       | some row => Q.set i (row ++ [trash])
---     (P_new, Q_new)
-
--- #eval RSK [2, 7, 1, 8, 11, 10, 4, 5, 0, 9, 3, 6].reverse =
---   ([[0, 3, 5, 6],
---     [1, 4, 8, 9],
---     [2, 7, 10],
---     [11]],
---    [[0, 1, 3, 4],
---     [2, 5, 7, 9],
---     [6, 10, 11],
---     [8]])
