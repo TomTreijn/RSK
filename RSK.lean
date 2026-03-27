@@ -286,12 +286,14 @@ theorem bmpshft_row_bi : Function.Bijective bmpshft_row := by
         rw [bmpshft_row]
         have none_find_none : List.findIdx? ((· > row'.getLast h_notnil')) row'.dropLast = none :=
         by
-          refine List.findIdx?_eq_none_iff.mpr ?_
+          apply List.findIdx?_eq_none_iff.mpr
           intro x hx_in_row'
           have ⟨i, hi_lt_len, hx_getElem⟩ := List.mem_iff_getElem.mp hx_in_row'
           have row_len_lt : row'.length - 1 < row'.length := by
-            have := List.length_pos_iff.mpr h_notnil'; omega
-          have hi_lt_len' : i < row'.length - 1 := List.length_dropLast ▸ hi_lt_len
+            have := List.length_pos_of_ne_nil h_notnil'; omega
+          have hi_lt_len' : i < row'.length - 1 := by
+            rw[List.length_dropLast] at hi_lt_len
+            exact hi_lt_len
           rw[←List.getElem_length_sub_one_eq_getLast row_len_lt]
           rw[List.getElem_dropLast hi_lt_len] at hx_getElem
           rw[←hx_getElem]
