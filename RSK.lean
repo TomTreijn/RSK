@@ -37,7 +37,7 @@ def bmpshft_row (var : bmpshft_row_in) : bmpshft_row_out :=
       apply wkinc_append_wkinc
       · exact h_wkinc
       · match hrl : row.getLast? with
-        | none => exact Option.none_le
+        | none => exact op_le_none_l
         | some a =>
           have left_le := List.findIdx?_eq_none_iff.mp (i_eq.symm)
           have ha_in : a ∈ row := List.mem_of_getLast? hrl
@@ -46,7 +46,8 @@ def bmpshft_row (var : bmpshft_row_in) : bmpshft_row_out :=
           exact Option.some_le_some.mpr (Nat.le_of_not_lt ha_leq)
     have h_notnil' : row' ≠ [] := List.concat_ne_nil k row
     have h_leq' : op_lt (row'.head h_notnil') k' := by
-      dsimp only [op_lt, k']
+      dsimp only [k']
+      exact op_lt_none_r
     ⟨row', h_wkinc', k', h_notnil', h_leq'⟩
   | some j =>
     have h_eq_some := List.findIdx?_eq_some_iff_getElem.mp hi
@@ -90,7 +91,7 @@ def bmpshft_row (var : bmpshft_row_in) : bmpshft_row_out :=
             apply Or.inr
             have hsubj_lt_j : j-1 < j := Nat.sub_one_lt hj
             rw[List.getElem?_eq_getElem (Nat.sub_lt_of_lt h_j_lt_len)]
-            simp only [op_le, ge_iff_le]
+            simp only [op_le]
             exact hleft_lt_k (j-1) hsubj_lt_j
         · if hsuccj : j + 1 ≥ row.length then
             rw [List.getElem?_eq_none hsuccj]
@@ -124,8 +125,8 @@ def bmpshft_row (var : bmpshft_row_in) : bmpshft_row_out :=
           exact Nat.ne_zero_of_lt h
     ⟨row', h_wkinc', k', h_notnil', h_leq'⟩
 
-#eval! bmpshft_row ⟨[1, 2, 4, 5], (by simp[IsWeakInc]), 3⟩
-#eval! bmpshft_row ⟨[1, 2, 4, 5], (by simp[IsWeakInc]), 6⟩
+#eval! bmpshft_row ⟨[1, 2, 4, 5], (by simp[IsWeakInc, IsMonotone]), 3⟩
+#eval! bmpshft_row ⟨[1, 2, 4, 5], (by simp[IsWeakInc, IsMonotone]), 6⟩
 
 def bmpshft_row_inv (var : bmpshft_row_out) : bmpshft_row_in :=
   let ⟨row', h_wkinc', k', h_notnil', h_leq'⟩ := var
@@ -181,8 +182,10 @@ def bmpshft_row_inv (var : bmpshft_row_out) : bmpshft_row_in :=
 
 example {a : Nat} (h : ¬a > 0) : (a = 0) := Nat.eq_zero_of_not_pos h
 example {a b : Nat} (h : a ≤ b) : (b ≥ a) := by exact String.Pos.Raw.mk_le_mk.mp h
-#eval! bmpshft_row_inv ⟨[1, 2, 4, 5], (by simp[IsWeakInc]), none, (by simp), (op_lt_none_r)⟩
-#eval! bmpshft_row_inv ⟨[1, 2, 4, 5], (by simp[IsWeakInc]), some 5, (by simp), (by rw[op_lt_some]; decide)⟩
+#eval! bmpshft_row_inv ⟨[1, 2, 4, 5],
+  (by simp[IsWeakInc, IsMonotone]), none, (by simp), (op_lt_none_r)⟩
+#eval! bmpshft_row_inv ⟨[1, 2, 4, 5],
+  (by simp[IsWeakInc, IsMonotone]), some 5, (by simp), (by rw[op_lt_some]; decide)⟩
 
 theorem bmpshft_row_bi : Function.Bijective bmpshft_row := by
   apply Function.bijective_iff_has_inverse.mpr
