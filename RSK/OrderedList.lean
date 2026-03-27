@@ -29,7 +29,19 @@ def IsWeakInc (list : List Nat) : Prop :=
   | _ :: [] => True
   | a :: b :: tail => a ≤ b ∧ IsWeakInc (b :: tail)
 
+def IsStrictInc (list : List Nat) : Prop :=
+  match list with
+  | [] => True
+  | _ :: [] => True
+  | a :: b :: tail => a < b ∧ IsStrictInc (b :: tail)
+
 theorem wkinc_tail_wkinc (h : IsWeakInc (a :: tail)) : IsWeakInc (tail) := by
+  cases tail with
+  | nil => exact h
+  | cons b tail2 =>
+    exact h.right
+
+theorem stinc_tail_stinc (h : IsStrictInc (a :: tail)) : IsStrictInc (tail) := by
   cases tail with
   | nil => exact h
   | cons b tail2 =>
@@ -37,6 +49,9 @@ theorem wkinc_tail_wkinc (h : IsWeakInc (a :: tail)) : IsWeakInc (tail) := by
 
 def IsWeakInc2 (list : List Nat) : Prop :=
   ∀i j : Nat, (i_lt_j : i < j) → (j_le_l : j < list.length) → list[i]'(Nat.lt_trans i_lt_j j_le_l) ≤ list[j]'j_le_l
+
+def IsStrictInc2 (list : List Nat) : Prop :=
+  ∀i j : Nat, (i_lt_j : i < j) → (j_le_l : j < list.length) → list[i]'(Nat.lt_trans i_lt_j j_le_l) < list[j]'j_le_l
 
 theorem wkinc2_tail_wkinc2 (h_ord : IsWeakInc2 (a :: tail)) : IsWeakInc2 (tail) := by
   intro i j i_lt_j j_le_l
@@ -48,8 +63,17 @@ theorem wkinc2_tail_wkinc2 (h_ord : IsWeakInc2 (a :: tail)) : IsWeakInc2 (tail) 
   rw[←h₁, ←h₂]
   exact hi
 
-theorem wkinc_wkinc2 {list : List Nat} :
-  IsWeakInc list ↔ IsWeakInc2 list := by
+theorem stinc2_tail_stinc2 (h_ord : IsStrictInc2 (a :: tail)) : IsStrictInc2 (tail) := by
+  intro i j i_lt_j j_le_l
+  have i_lt_j_succ := Nat.add_lt_add_right i_lt_j 1
+  have j_le_l_succ : j + 1 < (a :: tail).length := Nat.add_lt_of_lt_sub j_le_l
+  have hi := h_ord (i+1) (j+1) i_lt_j_succ j_le_l_succ
+  have h₁ := List.getElem_cons_succ a (tail) i (Nat.lt_trans i_lt_j_succ j_le_l_succ)
+  have h₂ := List.getElem_cons_succ a (tail) j j_le_l_succ
+  rw[←h₁, ←h₂]
+  exact hi
+
+theorem wkinc_wkinc2 {list : List Nat} : IsWeakInc list ↔ IsWeakInc2 list := by
   constructor
   · intro h_ord i j i_lt_j j_le_l
     have i_le_l : i < list.length := Nat.lt_trans i_lt_j j_le_l
@@ -96,8 +120,59 @@ theorem wkinc_wkinc2 {list : List Nat} :
     | a :: b :: tail =>
       have h_ord_sub := wkinc2_tail_wkinc2 h_ord
       have hi := wkinc_wkinc2.mpr h_ord_sub
-      have a_le_b : a ≤ b := h_ord 0 1 Nat.one_pos (Nat.one_lt_succ_succ tail.length)
+      have a_le_b := h_ord 0 1 Nat.one_pos (Nat.one_lt_succ_succ tail.length)
       rw[IsWeakInc]
+      exact ⟨a_le_b, hi⟩
+
+theorem stinc_stinc2 {list : List Nat} : IsStrictInc list ↔ IsStrictInc2 list := by
+  constructor
+  · intro h_ord i j i_lt_j j_le_l
+    have i_le_l : i < list.length := Nat.lt_trans i_lt_j j_le_l
+    match list with
+    | [] => contradiction
+    | a :: [] =>
+      repeat rw [List.length] at j_le_l
+      have j_zero : j = 0 := Nat.lt_one_iff.mp j_le_l
+      rw [j_zero] at i_lt_j
+      contradiction
+    | a :: b :: tail =>
+      match i with
+      | 0 =>
+        match hj : j with
+        | 0 => contradiction
+        | 1 => simp only [List.getElem_cons_zero, List.getElem_cons_succ, h_ord.left]
+        | k + 2 =>
+          have h_ord_tail := stinc_tail_stinc h_ord
+          have hi := stinc_stinc2.mp h_ord_tail
+          have k_lt_l := Nat.succ_lt_succ_iff.mp j_le_l
+          have hi₂ := hi 0 (k+1) (Nat.zero_lt_succ k) k_lt_l
+          have h₁ : (b :: tail)[k+1] = (a :: b :: tail)[k+2] := List.getElem_cons_succ b tail k k_lt_l
+          have h₂ : (b :: tail)[0] = (a :: b :: tail)[1] := List.getElem_cons_succ a (b::tail) 0 (Nat.lt_of_le_of_lt i_lt_j j_le_l)
+          rw[h₂] at hi₂
+          rw [←h₁]
+          exact Nat.lt_trans h_ord.left hi₂
+      | k + 1 =>
+        match j with
+        | 0 => contradiction
+        | q + 1 =>
+          have h_ord_tail := stinc_tail_stinc h_ord
+          have hi := stinc_stinc2.mp h_ord_tail
+          have hq_lt_l : q < (b::tail).length := Nat.succ_lt_succ_iff.mp j_le_l
+          have hk_le_q : k < q := Nat.succ_lt_succ_iff.mp i_lt_j
+          have hi₂ := hi k q hk_le_q hq_lt_l
+          have h₁ : (b :: tail)[k] = (a :: b :: tail)[k+1] := List.getElem_cons_succ a (b::tail) k i_le_l
+          have h₂ : (b :: tail)[q] = (a :: b :: tail)[q+1] := List.getElem_cons_succ a (b::tail) q j_le_l
+          rw [←h₁, ←h₂]
+          exact hi₂
+  · intro h_ord
+    match list with
+    | [] => trivial
+    | [a] => trivial
+    | a :: b :: tail =>
+      have h_ord_sub := stinc2_tail_stinc2 h_ord
+      have hi := stinc_stinc2.mpr h_ord_sub
+      have a_le_b := h_ord 0 1 Nat.one_pos (Nat.one_lt_succ_succ tail.length)
+      rw[IsStrictInc]
       exact ⟨a_le_b, hi⟩
 
 theorem wkinc_front_wkinc (h : IsWeakInc list) : IsWeakInc list.dropLast := by
