@@ -8,18 +8,22 @@ def option_r (r : Nat → Nat → Prop) (a b : Option Nat) :=
 
 def op_lt (a b : Option Nat) := option_r (· < ·) a b
 def op_le (a b : Option Nat) := option_r (· ≤ ·) a b
+def op_ge (a b : Option Nat) := option_r (· ≥ ·) a b
 
 theorem option_r_some : option_r r (some a) (some b) = (r a b) := by rfl
 theorem op_le_some : op_le (some a) (some b) = (a ≤ b) := by rfl
 theorem op_lt_some : op_lt (some a) (some b) = (a < b) := by rfl
+theorem op_ge_some : op_ge (some a) (some b) = (a ≥ b) := by rfl
 
 theorem option_r_left_none r : option_r r (none) (b) := by simp only [option_r.eq_def]
 theorem op_le_none_l : op_le none a := option_r_left_none (· ≤ ·)
 theorem op_lt_none_l : op_lt none a := option_r_left_none (· < ·)
+theorem op_ge_none_l : op_ge none a := option_r_left_none (· ≥ ·)
 
 theorem option_r_right_none r : option_r r (a) (none) := by simp only [option_r.eq_def]
 theorem op_le_none_r : op_le a none := option_r_right_none (· ≤ ·)
 theorem op_lt_none_r : op_lt a none := option_r_right_none (· < ·)
+theorem op_ge_none_r : op_ge a none := option_r_right_none (· ≥ ·)
 
 def IsMonotone (r : Nat → Nat → Prop) (list : List Nat) : Prop :=
   match list with
@@ -147,7 +151,7 @@ theorem monotone_append_monotone (h_ord : IsMonotone r list) (n : Nat) (h_r : op
 theorem wkinc_append_wkinc (h_ord : IsWeakInc list) (n : Nat) (h_le : op_le list.getLast? n) :
   IsWeakInc (list ++ [n]) := monotone_append_monotone h_ord n h_le
 
-theorem monotone_ins_monotone r (h_ord : IsMonotone r list) (k i : Nat)
+theorem monotone_set_monotone r (h_ord : IsMonotone r list) (k i : Nat)
   (h_r : ((i=0) ∨ (option_r r list[i-1]? k)) ∧ (option_r r k list[i+1]?)) :
   IsMonotone r (list.set i k) := by
   match list with
@@ -187,13 +191,18 @@ theorem monotone_ins_monotone r (h_ord : IsMonotone r list) (k i : Nat)
       have h_r' : ((i+1= 0) ∨ option_r r (b :: c :: tail)[(i+1)-1]? k) ∧ (option_r r k (b :: c :: tail)[(i+1)+1]?) := by
         simp at h_r
         simp[h_r]
-      have ih := monotone_ins_monotone r (monotone_tail_monotone h_ord) k (i+1) h_r'
+      have ih := monotone_set_monotone r (monotone_tail_monotone h_ord) k (i+1) h_r'
       repeat rw[List.set]
       rw[List.set] at ih
       rw[IsMonotone]
       exact⟨h_ord.left, ih⟩
 
-theorem wkinc_ins_wkinc (h_ord : IsWeakInc list) (k i : Nat)
+theorem wkinc_set_wkinc (h_ord : IsWeakInc list) (k i : Nat)
   (h_le : ((i=0) ∨ (op_le list[i-1]? k)) ∧ (op_le k list[i+1]?)) :
   IsWeakInc (list.set i k) :=
-  monotone_ins_monotone (· ≤ ·) h_ord k i h_le
+  monotone_set_monotone (· ≤ ·) h_ord k i h_le
+
+theorem wkdec_set_wkdec (h_ord : IsWeakDec list) (k i : Nat)
+  (h_ge : ((i=0) ∨ (op_ge list[i-1]? k)) ∧ (op_ge k list[i+1]?)) :
+  IsWeakDec (list.set i k) :=
+  monotone_set_monotone (· ≥ ·) h_ord k i h_ge

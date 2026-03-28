@@ -3,10 +3,9 @@ import Mathlib.Data.SetLike.Basic
 import RSK.Basic
 import Mathlib.Tactic
 import RSK.OrderedList
+import RSK.SSYT
 
 set_option relaxedAutoImplicit true
-
-abbrev Grid := List (List Nat)
 
 structure bmpshft_row_in where
   row : List Nat
@@ -81,7 +80,7 @@ def bmpshft_row (var : bmpshft_row_in) : bmpshft_row_out :=
       exact List.ne_nil_of_length_pos row'len_not_zero
     have h_wkinc' : IsWeakInc row' := by
       dsimp only [row']
-      apply wkinc_ins_wkinc
+      apply wkinc_set_wkinc
       · exact h_wkinc
       · dsimp only [i] at hi
         constructor
@@ -140,7 +139,7 @@ def bmpshft_row_inv (var : bmpshft_row_out) : bmpshft_row_in :=
     let row := row'.set i k'
     let k := row'[i]
     have h_wkinc : IsWeakInc row := by
-      apply wkinc_ins_wkinc
+      apply wkinc_set_wkinc
       · exact h_wkinc'
       · have hfind_gt_zero : row'.findIdx (· ≥ k') > 0 := by
           by_contra hP
@@ -388,3 +387,27 @@ theorem bmpshft_row_bi : Function.Bijective bmpshft_row := by
 example (a b : Nat) (h_1 : a ≤ b) (h_2 : ¬a = b) : (a < b):= by exact Nat.lt_of_le_of_ne h_1 h_2
 example (a b : Nat) (h_1 : some a = some b) : (a = b) := by exact ENat.coe_inj.mp h_1
 example (a b : Nat) : (a < b) = (b > a) := by exact Eq.propIntro (fun a ↦ a) fun a ↦ a
+
+structure bmpshft_in where
+  cells : Grid
+  hDiagram : isDiagram cells
+  hSSYT : isSSYT cells hDiagram
+  k : Nat
+
+structure bmpshft_out where
+  cells' : Grid
+  hDiagram' : isDiagram cells'
+  hSSYT' : isSSYT cells' hDiagram'
+  row : Nat
+  hrow_lt_len : row < cells'.length
+  hrow_gt_next :
+    if hsuccrow : row + 1 = cells'.length then
+      true
+    else
+      have hsuccrow_lt_len : row + 1 < cells'.length := Nat.lt_of_le_of_ne hrow_lt_len hsuccrow
+      cells'[row].length > cells'[row + 1].length
+
+def bmpshft (var : bmpshft_in) : bmpshft_out :=
+  have ⟨cells, hdiagram, hSSYT, k⟩ := var
+
+  sorry
