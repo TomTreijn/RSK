@@ -131,6 +131,7 @@ theorem montone_front_monotone r (h : IsMonotone r list) : IsMonotone r list.dro
     exact ⟨h.left, ih₂⟩
 
 theorem wkinc_front_wkinc (h : IsWeakInc list) : IsWeakInc list.dropLast := montone_front_monotone (· ≤ ·) h
+theorem wkdec_front_wkdec (h : IsWeakDec list) : IsWeakDec list.dropLast := montone_front_monotone (· ≥ ·) h
 
 theorem monotone_append_monotone (h_ord : IsMonotone r list) (n : Nat) (h_r : option_r r list.getLast? n) :
   IsMonotone r (list ++ [n]) := by

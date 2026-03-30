@@ -33,13 +33,7 @@ theorem Diagram_append (hdiagram : IsDiagram cells) (j : Nat) (k : Nat)
   (hst_dec : j = 0 ∨ cells[j].length < cells[j - 1].length) :
   IsDiagram (cells.set j (cells[j] ++ [k])) := by
   constructor
-  · have switch_map_set : (cells.set j (cells[j] ++ [k])).map (·.length) =
-      (cells.map (·.length)).set j (cells[j].length + 1) := by
-      have lengths_eq : ((cells.set j (cells[j] ++ [k])).map (·.length)).length =
-        ((cells.map (·.length)).set j (cells[j].length + 1)).length := by simp
-      apply List.map_eq_iff.mpr
-      grind
-    rw[switch_map_set]
+  · rw[List.map_set, List.length_append, List.length_singleton]
     apply wkdec_set_wkdec
     · exact hdiagram.left
     · constructor
@@ -275,9 +269,76 @@ theorem SSYT_set (hSSYT : IsSSYT cells hdiagram) (j i : Nat) (k : Nat)
           simp_rw [List.getElem_set_ne hj₂_eq_j] at hi₂_lt_len
           exact hSSYT.right j₁ j₂ i₂ hj₁_lt_j₂ hj₂_lt_len hi₂_lt_len
 
+theorem Diagram_remove (hdiagram : IsDiagram cells) (j : Nat)
+  (hj_lt_len : j < cells.length)
+  (hst_dec :
+    if hsuccj_len : j + 1 < cells.length then
+      cells[j].length > cells[j + 1].length
+    else
+      True
+  ) :
+  if cells[j].length > 1 then
+    IsDiagram (cells.set j (cells[j].dropLast))
+  else
+    IsDiagram cells.dropLast := by
+  split
+  · case isTrue hlenj =>
+      constructor
+      · rw[List.map_set, List.length_dropLast]
+        apply wkdec_set_wkdec
+        · exact hdiagram.left
+        · constructor
+          · if hj : j = 0 then
+              apply Or.intro_left
+              exact hj
+            else
+              apply Or.intro_right
+              have hsubj_lt_len : j - 1 < cells.length := Nat.sub_lt_of_lt hj_lt_len
+              rw[List.getElem?_eq_getElem (by rw[List.length_map]; exact hsubj_lt_len)]
+              have subj_lt_j : j -1 < j := Nat.sub_one_lt hj
+              rw[op_ge_some, List.getElem_map]
+              have := diagram_decreasing hdiagram (j-1) j subj_lt_j hj_lt_len
+              omega
+          · if hsuccj : j + 1 < cells.length then
+              simp only [hsuccj, ↓reduceDIte] at hst_dec
+              rw[List.getElem?_eq_getElem (by rw[List.length_map]; exact Nat.lt_of_succ_le hsuccj)]
+              rw[op_ge_some, List.getElem_map]
+              exact Nat.le_sub_one_of_lt hst_dec
+            else
+              rw[List.getElem?_eq_none (by rw[List.length_map]; exact Nat.le_of_not_lt hsuccj)]
+              exact op_ge_none_r
+      · intro i hi_lt_len
+        rw [List.length_set] at hi_lt_len
+        if hi_eq_j : j = i then
+          simp_rw[←hi_eq_j, List.getElem_set_self, List.length_dropLast]
+          omega
+        else
+          rw[List.getElem_set_ne hi_eq_j]
+          exact hdiagram.right i hi_lt_len
+  · case isFalse hlenj =>
+    -- have hlenj_eq_one : cells[j].length = 1 := by
+    --   have := hdiagram.right j hj_lt_len
+    --   omega
+    -- have hlen_eq_succ_j : cells.length = j + 1 := by
+    --   by_contra hP
+    --   have hsuccj_lt_len : j + 1 < cells.length := Nat.lt_of_le_of_ne hj_lt_len (Ne.symm hP)
+    --   simp[hsuccj_lt_len, hlenj_eq_one] at hst_dec
+    --   have hlen_succj_gt_zero := hdiagram.right (j + 1) hsuccj_lt_len
+    --   rw [hst_dec] at hlen_succj_gt_zero
+    --   contradiction
+    constructor
+    · rw[List.map_dropLast]
+      exact wkdec_front_wkdec hdiagram.left
+    · intro i hi_lt_sub_len
+      rw [List.getElem_dropLast]
+      rw [List.length_dropLast] at hi_lt_sub_len
+      have hi_lt_len : i < cells.length := Nat.lt_of_lt_pred hi_lt_sub_len
+      exact hdiagram.right i hi_lt_len
 
 example (a : Nat) : [a].length = 1 := by exact List.length_singleton
 example (a b : Nat) (h : a < b) : (a - 1 < b) := by exact Nat.sub_lt_of_lt h
+example (a b : Nat) (h : a ≤ b) : (a - 1 ≤ b) := by omega
+
 example (a b : Nat) (h : a < b) (h2 : a + 1 ≠ b) : (a + 1 < b) := Nat.lt_of_le_of_ne h h2
 example (l : List Nat) (p : Nat → Bool) : (∀ e ∈ l.takeWhile p, p e) := by
   have ijij := List.all_takeWhile (l:=l) (p:=p)
