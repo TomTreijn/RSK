@@ -1,7 +1,7 @@
 
 set_option relaxedAutoImplicit true
 
-def option_r (r : Nat → Nat → Prop) (a b : Option Nat) :=
+def option_r {α : Type} (r : α → α → Prop) (a b : Option α) :=
   match a, b with
   | some a, some b => r a b
   | _, _ => True
@@ -25,7 +25,7 @@ theorem op_le_none_r : op_le a none := option_r_right_none (· ≤ ·)
 theorem op_lt_none_r : op_lt a none := option_r_right_none (· < ·)
 theorem op_ge_none_r : op_ge a none := option_r_right_none (· ≥ ·)
 
-def IsMonotone (r : Nat → Nat → Prop) (list : List Nat) : Prop :=
+def IsMonotone {α : Type} (r : α → α → Prop) (list : List α) : Prop :=
   match list with
   | [] => True
   | [_] => True
@@ -45,7 +45,7 @@ theorem wkinc_tail_wkinc (h : IsWeakInc (a :: tail)) : IsWeakInc (tail) := monot
 theorem stinc_tail_stinc (h : IsStrictInc (a :: tail)) : IsStrictInc (tail) := monotone_tail_monotone h
 theorem wkdec_tail_wkdec (h : IsWeakDec (a :: tail)) : IsWeakDec (tail) := monotone_tail_monotone h
 
-def IsMonotone2 (r : Nat → Nat → Prop) (list : List Nat) : Prop :=
+def IsMonotone2 {α : Type} (r : α → α → Prop) (list : List α) : Prop :=
   ∀i j : Nat, (i_lt_j : i < j) → (j_le_l : j < list.length) → r (list[i]'(Nat.lt_trans i_lt_j j_le_l)) (list[j]'j_le_l)
 
 def IsWeakInc2 (list : List Nat) : Prop := IsMonotone2 (· ≤ ·) list
@@ -62,7 +62,7 @@ theorem monotone2_tail_monotone2 (h_ord : IsMonotone2 r (a :: tail)) : IsMonoton
   rw[←h₁, ←h₂]
   exact hi
 
-theorem monotone_monotone2 r (trans : ∀{a b c : Nat}, r a b → r b c → r a c) {list}
+theorem monotone_monotone2 r (trans : ∀{a b c : α}, r a b → r b c → r a c) {list}
    : IsMonotone r list ↔ IsMonotone2 r list := by
   constructor
   · intro h_ord i j i_lt_j j_le_l
@@ -133,7 +133,7 @@ theorem montone_front_monotone r (h : IsMonotone r list) : IsMonotone r list.dro
 theorem wkinc_front_wkinc (h : IsWeakInc list) : IsWeakInc list.dropLast := montone_front_monotone (· ≤ ·) h
 theorem wkdec_front_wkdec (h : IsWeakDec list) : IsWeakDec list.dropLast := montone_front_monotone (· ≥ ·) h
 
-theorem monotone_append_monotone (h_ord : IsMonotone r list) (n : Nat) (h_r : option_r r list.getLast? n) :
+theorem monotone_append_monotone {α : Type} {list : List α} {r : α → α → Prop} (h_ord : IsMonotone r list) (n : α) (h_r : option_r r list.getLast? n) :
   IsMonotone r (list ++ [n]) := by
   match h_list : list with
   | [] => simp only [List.nil_append, IsMonotone]
@@ -152,7 +152,7 @@ theorem monotone_append_monotone (h_ord : IsMonotone r list) (n : Nat) (h_r : op
 theorem wkinc_append_wkinc (h_ord : IsWeakInc list) (n : Nat) (h_le : op_le list.getLast? n) :
   IsWeakInc (list ++ [n]) := monotone_append_monotone h_ord n h_le
 
-theorem monotone_set_monotone r (h_ord : IsMonotone r list) (k i : Nat)
+theorem monotone_set_monotone {α : Type} {list : List α} (r : α → α → Prop) (h_ord : IsMonotone r list) (k : α) (i : Nat)
   (h_r : ((i=0) ∨ (option_r r list[i-1]? k)) ∧ (option_r r k list[i+1]?)) :
   IsMonotone r (list.set i k) := by
   match list with
