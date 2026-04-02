@@ -19,11 +19,11 @@ theorem diagram_decreasing (hdiagram : IsDiagram cells)
 
 def IsSSYT (cells : Grid) (hdiagram : IsDiagram cells) : Prop :=
   (∀ (j : Nat) (h : j < cells.length), IsWeakInc cells[j]) ∧
+  -- Could be turned into pairwise comparison to make proving the increasing columns easier.
   ∀ (j₁ j₂ i : Nat)
     (hj₁_lt_j₂ : j₁ < j₂)
     (hj₂_lt_len : j₂ < cells.length)
     (hi_lt_len : i < cells[j₂].length),
-    have hj₁_lt_len : j₁ < cells.length := Nat.lt_trans hj₁_lt_j₂ hj₂_lt_len
     have hlenj₂_le_lenj₁ : cells[j₂].length ≤ cells[j₁].length :=
       diagram_decreasing hdiagram j₁ j₂ hj₁_lt_j₂ hj₂_lt_len
     cells[j₁][i] < cells[j₂][i]
@@ -76,15 +76,17 @@ theorem length_append_neq_nil (cells : Grid) (j : Nat) (k : Nat)
   rw [length_nil] at hj_lt_len
   contradiction
 
+example (i : Nat) : i ≥ 0 := by sorry
+
 theorem SSYT_append (hSSYT : IsSSYT cells hdiagram) (j : Nat) (k : Nat)
   (hj_lt_len : j < cells.length)
   (hst_dec : j = 0 ∨ cells[j].length < cells[j - 1].length)
   (h_row : IsWeakInc (cells[j] ++ [k]))
   (h_col_above :
-    if hi : j = 0 then
+    if hj : j = 0 then
       True
     else
-      have := Or.resolve_left hst_dec hi
+      have := Or.resolve_left hst_dec hj
       have := Nat.sub_lt_of_lt hj_lt_len
       k > cells[j - 1][cells[j].length]
   ) :
