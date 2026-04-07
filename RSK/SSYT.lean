@@ -59,6 +59,12 @@ theorem SSYT_col_increasing (hSSYT : IsSSYT cells)
   have ⟨_, inc⟩ := rowinc_rowinc2.mp hSSYT.right j₁ j₂ hj₁_lt_j₂ hj₂_lt_len
   exact inc i hi_lt_len
 
+theorem SSYT_row_increasing (hSSYT : IsSSYT cells)
+  (i₁ i₂ j : Nat) (hj_lt_len : j < cells.length) (hi₁_lt_i₂ : i₁ < i₂)
+  (hi₂_lt_len : i₂ < cells[j].length) :
+  cells[j][i₁] ≤ cells[j][i₂] :=
+  wkinc_wkinc2.mp (hSSYT.left j hj_lt_len).left i₁ i₂ hi₁_lt_i₂ hi₂_lt_len
+
 theorem SSYT_append_row (hSSYT : IsSSYT cells) (k : Nat)
   (h_col_above :
     if hcells : cells.length = 0 then

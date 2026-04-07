@@ -19,8 +19,6 @@ structure bmpshft_row_out where
   h_notnil : row ≠ []
   h_leq : op_lt (row.head h_notnil) k'
 
-
-
 -- insert into a row
 def bmpshft_row (var : bmpshft_row_in) : bmpshft_row_out :=
   let ⟨row, h_wkinc, k⟩ := var
@@ -186,7 +184,7 @@ example {a b : Nat} (h : a ≤ b) : (b ≥ a) := by exact String.Pos.Raw.mk_le_m
 #eval! bmpshft_row_inv ⟨[1, 2, 4, 5],
   (by simp[IsWeakInc, IsMonotone]), some 5, (by simp), (by rw[op_lt_some]; decide)⟩
 
-theorem bmpshft_row_bi : Function.Bijective bmpshft_row := by
+theorem bmpshft_row_bi : Function.Bijective bmpshft_row := show_term by
   apply Function.bijective_iff_has_inverse.mpr
   have is_inv : Function.LeftInverse bmpshft_row_inv bmpshft_row ∧
         Function.RightInverse bmpshft_row_inv bmpshft_row := by
@@ -388,26 +386,188 @@ example (a b : Nat) (h_1 : a ≤ b) (h_2 : ¬a = b) : (a < b):= by exact Nat.lt_
 example (a b : Nat) (h_1 : some a = some b) : (a = b) := by exact ENat.coe_inj.mp h_1
 example (a b : Nat) : (a < b) = (b > a) := by exact Eq.propIntro (fun a ↦ a) fun a ↦ a
 
-structure bmpshft_in where
+structure bmpshft_row_full_in where
   cells : Grid
-  hDiagram : isDiagram cells
-  hSSYT : isSSYT cells hDiagram
+  hSSYT : IsSSYT cells
   k : Nat
-
-structure bmpshft_out where
-  cells' : Grid
-  hDiagram' : isDiagram cells'
-  hSSYT' : isSSYT cells' hDiagram'
-  row : Nat
-  hrow_lt_len : row < cells'.length
-  hrow_gt_next :
-    if hsuccrow : row + 1 = cells'.length then
-      true
+  j : Nat
+  hj_lt_len : j < cells.length
+  h_col :
+    if hj : j = 0 then
+      True
     else
-      have hsuccrow_lt_len : row + 1 < cells'.length := Nat.lt_of_le_of_ne hrow_lt_len hsuccrow
-      cells'[row].length > cells'[row + 1].length
+      have := diagram_decreasing hSSYT (j - 1) j (Nat.sub_one_lt hj) hj_lt_len
+      -- There is an element in the row above, which
+      -- a) is smaller than k and
+      -- b) the number below is larger than k.
+      ∃ (i : Nat) (hi_lt_lensubj : i < cells[j - 1].length), cells[j - 1][i] < k ∧
+        if hi_lt_lenj : i < cells[j].length then
+          cells[j][i] > k
+        else
+          True
 
-def bmpshft (var : bmpshft_in) : bmpshft_out :=
-  have ⟨cells, hdiagram, hSSYT, k⟩ := var
+structure bmpshft_row_full_out_some where
+  cells : Grid
+  hSSYT : IsSSYT cells
+  k : Nat
+  j : Nat
+  hj_lt_len : j < cells.length
+  h_col :
+    if hj : j + 1 < cells.length then
+      have := diagram_decreasing hSSYT j (j + 1) (lt_add_one j) hj
+      ∃ (i : Nat) (hi_lt_len : i < cells[j].length), cells[j][i] < k ∧
+        if hi_lt_len : i < cells[j + 1].length then
+          cells[j + 1][i] > k
+        else
+          True
+    else
+      True
 
-  sorry
+structure bmpshft_row_full_out_none where
+  cells : Grid
+  hSSYT : IsSSYT cells
+  j : Nat
+  hj_lt_len : j < cells.length
+  h_col :
+    if hj : j + 1 < cells.length then
+      cells[j + 1].length < cells[j].length
+    else
+      True
+
+abbrev bmpshft_row_full_out := Sum bmpshft_row_full_out_none bmpshft_row_full_out_some
+
+def bmpshft_row_full (var : bmpshft_row_full_in) : bmpshft_row_full_out :=
+  let ⟨cells, hSSYT, k, j, hj_lt_len, h_col⟩ := var
+  let var_in : bmpshft_row_in := ⟨cells[j], (hSSYT.left j hj_lt_len).left, k⟩
+
+  let var_out := bmpshft_row var_in
+  have hvar_out_eq : var_out = bmpshft_row var_in := by rfl
+
+
+
+
+  match h_found : cells[j].findIdx? (· > k), bmpshft_row._proof_2 row k with
+  | none, eq =>
+
+    Sum.inl ⟨cells', by
+      rw[cells'_eq]
+      have wk_inc : IsWeakInc (cells[j] ++ [k]) := by rw[←row_eq]; exact var_out.h_wkinc
+      if hj : j = 0 then
+        apply SSYT_append hSSYT
+        · exact wk_inc
+        · simp[hj]
+        · simp[hj]
+      else
+        simp[hj] at h_col
+        let ⟨i, hEsubji_lt_k, hji_gt_k⟩ := h_col
+        let ⟨hi_lt_len_subj, hsubji_lt_k⟩ := hEsubji_lt_k
+        have hi_gt_lenj : i ≥ cells[j].length := by
+          by_contra hP
+          have i_lt_len : i < cells[j].length := Nat.lt_of_not_le hP
+          have h_k_lt := hji_gt_k (i_lt_len)
+          have h_all_ge := List.findIdx?_eq_none_iff.mp h_found
+          have h_k_ge := h_all_ge cells[j][i] (List.getElem_mem i_lt_len)
+          simp at h_k_ge
+          omega
+        apply SSYT_append hSSYT
+        · exact wk_inc
+        · simp[hj]
+          if hi : i = cells[j].length then
+            simp_rw[←hi]
+            exact hsubji_lt_k
+          else
+            have oiijioi := SSYT_row_increasing hSSYT cells[j].length i (j-1) (Nat.sub_lt_of_lt hj_lt_len) (by omega) (Nat.lt_of_succ_le hi_lt_len_subj)
+            exact Nat.lt_of_le_of_lt oiijioi hsubji_lt_k
+        · apply Or.intro_right
+          omega
+      ,
+      j, by
+      rw[cells'_eq, List.length_set]
+      exact hj_lt_len, by
+      if hsuccj_lt_len : j + 1 < cells.length then
+        simp[hsuccj_lt_len, cells'_eq]
+        exact diagram_decreasing hSSYT j (j + 1) (lt_add_one j) hsuccj_lt_len
+      else
+        simp_rw[cells'_eq, List.length_set]
+        simp[hsuccj_lt_len]
+      ⟩
+  | some i =>
+    have ⟨hi_lt_len, find⟩ := List.findIdx?_eq_some_iff_findIdx_eq.mp h_found
+    have hvar_out_eq : var_out = ⟨cells[j].set i k, _, some cells[j][i], _, _⟩ := by
+      rw[bmpshft_row] at hvar_out_eq
+      simp at hvar_out_eq
+      split at hvar_out_eq
+      · case h_1 cont _ =>
+        rw[h_found] at cont
+        contradiction
+      · case h_2 i₂ i₂_eq _ _ _ =>
+        sorry
+        -- have i_eq_i₂ : i₂ = i := by
+        --   simp_rw[h_found] at i₂_eq
+        --   exact ENat.coe_inj.mp i₂_eq
+        -- simp_rw[i_eq_i₂] at hvar_out_eq
+        --exact hvar_out_eq
+
+    let row' := var_out.row
+    let row_eq : row' = cells[j].set i k := by
+      dsimp[row']; rw[hvar_out_eq]
+
+    let cells' := cells.set j var_out.row
+    let cells'_eq : cells' = cells.set j (cells[j].set i k) := by
+      dsimp[cells']; rw[←row_eq]
+
+    let k' : Nat := var_out.k'
+
+    Sum.inr ⟨cells', by
+      rw[cells'_eq]
+      have wk_inc : IsWeakInc (cells[j].set i k) := by rw[←row_eq]; exact var_out.h_wkinc
+
+      apply SSYT_set hSSYT
+      · exact wk_inc
+      · if hj : j = 0 then
+          simp[hj]
+        else
+          simp[hj]
+          simp[hj] at h_col
+          have ⟨i₂, hE_jsubi_lt_k, hk_lt_ji⟩ := h_col
+          have ⟨hi₂_lt_subjlen, h_subji_lt_k⟩ := hE_jsubi_lt_k
+          have hi_le_i₂ : i ≤ i₂ := by
+            by_contra hP
+            have hi₂_lt_i : i₂ < i := Nat.lt_of_not_le hP
+            have hi₂_lt_len : i₂ < cells[j].length := Nat.lt_trans hi₂_lt_i hi_lt_len
+            have hk_ge_ji₂ := ((List.findIdx_eq hi_lt_len).mp find).right i₂ hi₂_lt_i
+            have hk_lt_ji₂ := hk_lt_ji hi₂_lt_len
+            simp at hk_ge_ji₂
+            omega
+          if hi₂ : i₂ = i then
+            simp_rw[hi₂] at h_subji_lt_k
+            exact h_subji_lt_k
+          else
+            have hi_lt_i₂ : i < i₂ := by omega
+            have := SSYT_row_increasing hSSYT i i₂ (j - 1) (Nat.sub_lt_of_lt hj_lt_len) hi_lt_i₂ hi₂_lt_subjlen
+            omega
+      · if hj : j + 1 < List.length cells then
+          simp[hj]
+          if hi : i < cells[j + 1].length then
+            simp[hi]
+            have hji_gt_k := ((List.findIdx_eq hi_lt_len).mp find).left
+            simp at hji_gt_k
+            have := SSYT_col_increasing hSSYT i j (j + 1) (lt_add_one j) hj hi
+            simp only at this
+            omega
+          else
+            simp[hi]
+        else
+          simp[hj]
+      · exact hi_lt_len
+      · exact hSSYT
+      , (var_out.k', j, sorry⟩
+
+variable (a b c : Nat)
+
+example (a : Nat) : a ≠ a + 1 := by exact Nat.ne_add_one a
+variable (h1 : a = b) (h2 : b = c)
+
+#check congrArg (fun _a ↦ _a = c) h1
+
+example (a b c : Nat) (h1 : a = b) (h2 : b = c) := Eq.mp (congrArg (fun _a ↦ _a = c) (Eq.symm h1)) h2
