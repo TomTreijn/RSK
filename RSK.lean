@@ -406,35 +406,25 @@ structure bmpshft_row_full_in where
         else
           True
 
-structure bmpshft_row_full_out_some where
+structure bmpshft_row_full_out where
   cells : Grid
   hSSYT : IsSSYT cells
-  k : Nat
+  k' : Option Nat
   j : Nat
   hj_lt_len : j < cells.length
   h_col :
     if hj : j + 1 < cells.length then
-      have := diagram_decreasing hSSYT j (j + 1) (lt_add_one j) hj
-      ∃ (i : Nat) (hi_lt_len : i < cells[j].length), cells[j][i] < k ∧
-        if hi_lt_len : i < cells[j + 1].length then
-          cells[j + 1][i] > k
-        else
-          True
+      match k' with
+      | none => cells[j + 1].length < cells[j].length
+      | some k' =>
+        have := diagram_decreasing hSSYT j (j + 1) (lt_add_one j) hj
+        ∃ (i : Nat) (hi_lt_len : i < cells[j].length), cells[j][i] < k' ∧
+          if hi_lt_len : i < cells[j + 1].length then
+            cells[j + 1][i] > k'
+          else
+            True
     else
       True
-
-structure bmpshft_row_full_out_none where
-  cells : Grid
-  hSSYT : IsSSYT cells
-  j : Nat
-  hj_lt_len : j < cells.length
-  h_col :
-    if hj : j + 1 < cells.length then
-      cells[j + 1].length < cells[j].length
-    else
-      True
-
-abbrev bmpshft_row_full_out := Sum bmpshft_row_full_out_none bmpshft_row_full_out_some
 
 def bmpshft_row_full (var : bmpshft_row_full_in) : bmpshft_row_full_out :=
   let ⟨cells, hSSYT, k, j, hj_lt_len, h_col⟩ := var
@@ -443,125 +433,135 @@ def bmpshft_row_full (var : bmpshft_row_full_in) : bmpshft_row_full_out :=
   let var_out := bmpshft_row var_in
   have hvar_out_eq : var_out = bmpshft_row var_in := by rfl
 
-
-
-
-  match h_found : cells[j].findIdx? (· > k), bmpshft_row._proof_2 row k with
-  | none, eq =>
-
-    Sum.inl ⟨cells', by
-      rw[cells'_eq]
-      have wk_inc : IsWeakInc (cells[j] ++ [k]) := by rw[←row_eq]; exact var_out.h_wkinc
-      if hj : j = 0 then
-        apply SSYT_append hSSYT
-        · exact wk_inc
-        · simp[hj]
-        · simp[hj]
-      else
-        simp[hj] at h_col
-        let ⟨i, hEsubji_lt_k, hji_gt_k⟩ := h_col
-        let ⟨hi_lt_len_subj, hsubji_lt_k⟩ := hEsubji_lt_k
-        have hi_gt_lenj : i ≥ cells[j].length := by
-          by_contra hP
-          have i_lt_len : i < cells[j].length := Nat.lt_of_not_le hP
-          have h_k_lt := hji_gt_k (i_lt_len)
-          have h_all_ge := List.findIdx?_eq_none_iff.mp h_found
-          have h_k_ge := h_all_ge cells[j][i] (List.getElem_mem i_lt_len)
-          simp at h_k_ge
-          omega
-        apply SSYT_append hSSYT
-        · exact wk_inc
-        · simp[hj]
-          if hi : i = cells[j].length then
-            simp_rw[←hi]
-            exact hsubji_lt_k
-          else
-            have oiijioi := SSYT_row_increasing hSSYT cells[j].length i (j-1) (Nat.sub_lt_of_lt hj_lt_len) (by omega) (Nat.lt_of_succ_le hi_lt_len_subj)
-            exact Nat.lt_of_le_of_lt oiijioi hsubji_lt_k
-        · apply Or.intro_right
-          omega
-      ,
-      j, by
-      rw[cells'_eq, List.length_set]
-      exact hj_lt_len, by
-      if hsuccj_lt_len : j + 1 < cells.length then
-        simp[hsuccj_lt_len, cells'_eq]
-        exact diagram_decreasing hSSYT j (j + 1) (lt_add_one j) hsuccj_lt_len
-      else
-        simp_rw[cells'_eq, List.length_set]
-        simp[hsuccj_lt_len]
-      ⟩
-  | some i =>
-    have ⟨hi_lt_len, find⟩ := List.findIdx?_eq_some_iff_findIdx_eq.mp h_found
-    have hvar_out_eq : var_out = ⟨cells[j].set i k, _, some cells[j][i], _, _⟩ := by
-      rw[bmpshft_row] at hvar_out_eq
-      simp at hvar_out_eq
+  ⟨cells.set j var_out.row,
+    -- The result is an SSYT
+    by
+      simp only[bmpshft_row, var_in] at hvar_out_eq
       split at hvar_out_eq
-      · case h_1 cont _ =>
-        rw[h_found] at cont
-        contradiction
-      · case h_2 i₂ i₂_eq _ _ _ =>
-        sorry
-        -- have i_eq_i₂ : i₂ = i := by
-        --   simp_rw[h_found] at i₂_eq
-        --   exact ENat.coe_inj.mp i₂_eq
-        -- simp_rw[i_eq_i₂] at hvar_out_eq
-        --exact hvar_out_eq
-
-    let row' := var_out.row
-    let row_eq : row' = cells[j].set i k := by
-      dsimp[row']; rw[hvar_out_eq]
-
-    let cells' := cells.set j var_out.row
-    let cells'_eq : cells' = cells.set j (cells[j].set i k) := by
-      dsimp[cells']; rw[←row_eq]
-
-    let k' : Nat := var_out.k'
-
-    Sum.inr ⟨cells', by
-      rw[cells'_eq]
-      have wk_inc : IsWeakInc (cells[j].set i k) := by rw[←row_eq]; exact var_out.h_wkinc
-
-      apply SSYT_set hSSYT
-      · exact wk_inc
-      · if hj : j = 0 then
-          simp[hj]
+      · case h_1 h_found _ =>
+        simp only [hvar_out_eq]
+        have wk_inc : IsWeakInc (cells[j] ++ [k]) := by
+          have wk_inc := var_out.h_wkinc
+          simp only [hvar_out_eq] at wk_inc
+          exact wk_inc
+        if hj : j = 0 then
+          apply SSYT_append hSSYT
+          · exact wk_inc
+          · simp[hj]
+          · simp[hj]
         else
-          simp[hj]
-          simp[hj] at h_col
-          have ⟨i₂, hE_jsubi_lt_k, hk_lt_ji⟩ := h_col
-          have ⟨hi₂_lt_subjlen, h_subji_lt_k⟩ := hE_jsubi_lt_k
-          have hi_le_i₂ : i ≤ i₂ := by
+          simp only [hj, ↓reduceDIte, dite_else_true, exists_and_right] at h_col
+          let ⟨i, hEsubji_lt_k, hji_gt_k⟩ := h_col
+          let ⟨hi_lt_len_subj, hsubji_lt_k⟩ := hEsubji_lt_k
+          have hi_gt_lenj : i ≥ cells[j].length := by
             by_contra hP
-            have hi₂_lt_i : i₂ < i := Nat.lt_of_not_le hP
-            have hi₂_lt_len : i₂ < cells[j].length := Nat.lt_trans hi₂_lt_i hi_lt_len
-            have hk_ge_ji₂ := ((List.findIdx_eq hi_lt_len).mp find).right i₂ hi₂_lt_i
-            have hk_lt_ji₂ := hk_lt_ji hi₂_lt_len
-            simp at hk_ge_ji₂
+            have i_lt_len : i < cells[j].length := Nat.lt_of_not_le hP
+            have h_k_lt := hji_gt_k (i_lt_len)
+            have h_all_ge := List.findIdx?_eq_none_iff.mp h_found
+            have h_k_ge := h_all_ge cells[j][i] (List.getElem_mem i_lt_len)
+            simp at h_k_ge
             omega
-          if hi₂ : i₂ = i then
-            simp_rw[hi₂] at h_subji_lt_k
-            exact h_subji_lt_k
+          apply SSYT_append hSSYT
+          · exact wk_inc
+          · simp only [hj, ↓reduceDIte]
+            if hi : i = cells[j].length then
+              simp_rw[←hi]
+              exact hsubji_lt_k
+            else
+              have hsubj_le_subji := SSYT_row_increasing hSSYT cells[j].length i (j-1)
+                (Nat.sub_lt_of_lt hj_lt_len) (by omega) (Nat.lt_of_succ_le hi_lt_len_subj)
+              exact Nat.lt_of_le_of_lt hsubj_le_subji hsubji_lt_k
+          · apply Or.intro_right
+            omega
+      · case h_2 i h_found _ _ _ =>
+        simp only[hvar_out_eq]
+
+        have ⟨hi_lt_len, find⟩ := List.findIdx?_eq_some_iff_findIdx_eq.mp (Eq.symm h_found)
+
+        apply SSYT_set hSSYT
+        · have wk_inc := var_out.h_wkinc
+          simp only [hvar_out_eq] at wk_inc
+          exact wk_inc
+        · if hj : j = 0 then
+            simp[hj]
           else
-            have hi_lt_i₂ : i < i₂ := by omega
-            have := SSYT_row_increasing hSSYT i i₂ (j - 1) (Nat.sub_lt_of_lt hj_lt_len) hi_lt_i₂ hi₂_lt_subjlen
-            omega
-      · if hj : j + 1 < List.length cells then
-          simp[hj]
-          if hi : i < cells[j + 1].length then
-            simp[hi]
-            have hji_gt_k := ((List.findIdx_eq hi_lt_len).mp find).left
-            simp at hji_gt_k
-            have := SSYT_col_increasing hSSYT i j (j + 1) (lt_add_one j) hj hi
-            simp only at this
-            omega
+            simp only [hj, ↓reduceDIte]
+            simp only [hj, ↓reduceDIte, dite_else_true, exists_and_right] at h_col
+            have ⟨i₂, hE_jsubi_lt_k, hk_lt_ji⟩ := h_col
+            have ⟨hi₂_lt_subjlen, h_subji_lt_k⟩ := hE_jsubi_lt_k
+            have hi_le_i₂ : i ≤ i₂ := by
+              by_contra hP
+              have hi₂_lt_i : i₂ < i := Nat.lt_of_not_le hP
+              have hi₂_lt_len : i₂ < cells[j].length := Nat.lt_trans hi₂_lt_i hi_lt_len
+              have hk_ge_ji₂ := ((List.findIdx_eq hi_lt_len).mp find).right i₂ hi₂_lt_i
+              have hk_lt_ji₂ := hk_lt_ji hi₂_lt_len
+              simp at hk_ge_ji₂
+              omega
+            if hi₂ : i₂ = i then
+              simp_rw[hi₂] at h_subji_lt_k
+              exact h_subji_lt_k
+            else
+              have hi_lt_i₂ : i < i₂ := by omega
+              have := SSYT_row_increasing hSSYT i i₂ (j - 1)
+                (Nat.sub_lt_of_lt hj_lt_len) hi_lt_i₂ hi₂_lt_subjlen
+              omega
+        · if hj : j + 1 < List.length cells then
+            simp[hj]
+            if hi : i < cells[j + 1].length then
+              simp[hi]
+              have hji_gt_k := ((List.findIdx_eq hi_lt_len).mp find).left
+              simp at hji_gt_k
+              have := SSYT_col_increasing hSSYT i j (j + 1) (lt_add_one j) hj hi
+              simp only at this
+              omega
+            else
+              simp[hi]
           else
-            simp[hi]
+            simp[hj]
+        · exact hi_lt_len
+        · exact hSSYT
+    , var_out.k'
+    , j
+    , by rw[List.length_set]; exact hj_lt_len
+    ,
+    -- The requirements for it to be invertable.
+    by
+      simp only[bmpshft_row] at hvar_out_eq
+      split at hvar_out_eq
+      · case h_1 h_1 h_found _ =>
+        simp only [var_in] at hvar_out_eq
+        simp only [hvar_out_eq]
+        if hsuccj_lt_len : j + 1 < cells.length then
+          simp [hsuccj_lt_len]
+          exact diagram_decreasing hSSYT j (j + 1) (lt_add_one j) hsuccj_lt_len
         else
-          simp[hj]
-      · exact hi_lt_len
-      · exact hSSYT
-      , (var_out.k', j, sorry⟩
+          simp_rw[List.length_set]
+          simp[hsuccj_lt_len]
+      · case h_2 i h_found _ _ _ =>
+        simp only [var_in] at hvar_out_eq
+        simp only [var_in] at h_found
+        simp only [hvar_out_eq]
+        have ⟨hi_lt_len, hrowi_gt_k, _⟩ := List.findIdx?_eq_some_iff_getElem.mp (Eq.symm h_found)
+        if hsuccj_lt_len : j + 1 < cells.length then
+          simp [hsuccj_lt_len]
+          exact ⟨i, ⟨
+              ⟨
+                hi_lt_len,
+                by
+                  simp only [decide_eq_true_eq] at hrowi_gt_k
+                  rw[List.getElem_set_self]
+                  exact hrowi_gt_k
+              ⟩,
+              by
+                intro hi_lt_len_succj
+                exact SSYT_col_increasing hSSYT i j (j + 1)
+                  (lt_add_one j) hsuccj_lt_len hi_lt_len_succj
+            ⟩
+          ⟩
+        else
+          simp_rw[List.length_set]
+          simp[hsuccj_lt_len]
+      ⟩
 
 variable (a b c : Nat)
 
