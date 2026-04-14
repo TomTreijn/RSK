@@ -41,6 +41,9 @@ theorem rowinc_set_rowinc (h_ord : IsRowInc cells) (k : List Nat) (i : Nat)
 theorem rowinc_front_rowinc (h : IsRowInc cells) : IsRowInc cells.dropLast :=
   montone_front_monotone row_comp h
 
+theorem rowinc_tail_rowinc (h : IsRowInc (top :: rest)) : IsRowInc rest :=
+  monotone_tail_monotone h
+
 def IsSSYT (cells : Grid) : Prop :=
   (∀ (j : Nat) (h : j < cells.length), IsWeakInc cells[j] ∧ cells[j] ≠ []) ∧
   IsRowInc cells
@@ -64,6 +67,14 @@ theorem SSYT_row_increasing (hSSYT : IsSSYT cells)
   (hi₂_lt_len : i₂ < cells[j].length) :
   cells[j][i₁] ≤ cells[j][i₂] :=
   wkinc_wkinc2.mp (hSSYT.left j hj_lt_len).left i₁ i₂ hi₁_lt_i₂ hi₂_lt_len
+
+theorem SSYT_sub_SSYT (hSSYT : IsSSYT (top :: rest)) : IsSSYT rest := by
+  constructor
+  · intro j hj_lt_len
+    have this := hSSYT.left (j + 1) (Nat.add_lt_of_lt_sub hj_lt_len)
+    rw [List.getElem_cons_succ] at this
+    exact this
+  · exact rowinc_tail_rowinc hSSYT.right
 
 theorem SSYT_append_row (hSSYT : IsSSYT cells) (k : Nat)
   (h_col_above :
