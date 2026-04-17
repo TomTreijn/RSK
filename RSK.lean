@@ -1211,3 +1211,6 @@ theorem bmpshft_right_inverse (var : bmpshft_out) : bmpshft (bmpshft_inv var) = 
   repeat
   · rw[right_inverse]
     simp_rw[var_out, bmpshft_out_to_bmpshft_ind_out]
+
+#eval bmpshft ⟨[[1, 2, 2, 3], [2, 3, 4], [5]], by grind[IsSSYT, IsWeakInc, IsRowInc, IsMonotone, row_comp], 2⟩
+#eval! bmpshft_inv (bmpshft ⟨[[1, 2, 2, 3], [2, 3, 4], [5]], by grind[IsSSYT, IsWeakInc, IsRowInc, IsMonotone, row_comp], 2⟩)
