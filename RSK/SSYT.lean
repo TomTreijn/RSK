@@ -48,6 +48,12 @@ def IsSSYT (cells : Grid) : Prop :=
   (∀ (j : Nat) (h : j < cells.length), IsWeakInc cells[j] ∧ cells[j] ≠ []) ∧
   IsRowInc cells
 
+theorem SSYT_rows_inc (hSSYT : IsSSYT cells) : IsRowInc cells := hSSYT.right
+theorem SSYT_row_weak (hSSYT : IsSSYT cells) (j : Nat) (h : j < cells.length) :
+  IsWeakInc cells[j] := (hSSYT.left j h).left
+theorem SSYT_row_not_nil (hSSYT : IsSSYT cells) (j : Nat) (h : j < cells.length) :
+  cells[j] ≠ [] := (hSSYT.left j h).right
+
 theorem diagram_decreasing (hSSYT : IsSSYT cells)
   (j₁ j₂ : Nat) (hj₁_lt_j₂ : j₁ < j₂) (hj₂_lt_len : j₂ < cells.length) :
   cells[j₁].length ≥ cells[j₂].length := by
