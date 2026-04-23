@@ -4,6 +4,7 @@ import RSK.Basic
 import Mathlib.Tactic
 import RSK.OrderedList
 import RSK.SSYT
+import RSK.SYT
 
 set_option relaxedAutoImplicit true
 
@@ -785,7 +786,8 @@ structure bmpshft_ind_out where
   hj_start_le_j : j_start ≤ var_out.j
   hk' : var_out.k' = none
 
-def bmpshft_row_in_next (var : bmpshft_row_full_in) (hk : (bmpshft_row_full var).k' = some k) : bmpshft_row_full_in :=
+def bmpshft_row_in_next (var : bmpshft_row_full_in) (hk : (bmpshft_row_full var).k' = some k) :
+  bmpshft_row_full_in :=
   let var_out := bmpshft_row_full var
   have hvar_out_eq : var_out = bmpshft_row_full var := by rfl
   ⟨var_out.cells,
@@ -797,10 +799,11 @@ def bmpshft_row_in_next (var : bmpshft_row_full_in) (hk : (bmpshft_row_full var)
         rw[←hvar_out_eq] at hk
         have h_col := var_out.h_col
         simp only [hk, dite_else_true, exists_and_right] at h_col
-        simp
+        simp only [Nat.add_eq_zero_iff, one_ne_zero, and_false, ↓reduceDIte, add_tsub_cancel_right,
+          dite_else_true, exists_and_right]
         split
         · case _ hsuccj_lt_len =>
-          simp [hsuccj_lt_len] at h_col
+          simp only [hsuccj_lt_len, forall_true_left] at h_col
           exact h_col
         · case _ hsuccj_eq_len =>
           have ⟨i, ⟨hi_lt_len, hji_lt_k⟩, _⟩ := h_col
@@ -809,10 +812,54 @@ def bmpshft_row_in_next (var : bmpshft_row_full_in) (hk : (bmpshft_row_full var)
             exact hji_lt_k
           else
             have hi_pos : i > 0 := by omega
-            have h_inc := SSYT_row_increasing var_out.hSSYT 0 i var_out.j var_out.hj_lt_len hi_pos hi_lt_len
+            have h_inc := SSYT_row_increasing var_out.hSSYT 0 i var_out.j
+              var_out.hj_lt_len hi_pos hi_lt_len
             exact Nat.lt_of_le_of_lt h_inc hji_lt_k
         ⟩
 
+@[simp]
+theorem shape_bmpshft_row_in_next (var : bmpshft_row_full_in)
+  (hk : (bmpshft_row_full var).k' = some k) :
+  shape (bmpshft_row_in_next var hk).cells = shape var.cells := by
+  simp only [bmpshft_row_in_next, bmpshft_row_full]
+  split
+  · case _ hj_lt_len =>
+    -- Should maybe be it's own theorem
+    simp only [bmpshft_row]
+    split
+    · case _ d _ =>
+      simp[bmpshft_row_full, hj_lt_len, bmpshft_row] at hk
+      split at hk
+      · case _ =>
+        contradiction
+      · case _ j _ =>
+        rw[d] at j
+        contradiction
+    · case _ =>
+      simp only
+      rw[shape, List.map_set, List.length_set, ←List.map_set, List.set_getElem_self, ←shape]
+  · case _ hj_ge_len =>
+    simp [bmpshft_row_full, hj_ge_len] at hk
+
+@[simp]
+theorem length_bmpshft_row_in_next (var : bmpshft_row_full_in)
+  (hk : (bmpshft_row_full var).k' = some k) :
+  (bmpshft_row_in_next var hk).cells.length = var.cells.length := by
+  rw[←shape_length_eq_length, shape_bmpshft_row_in_next, shape_length_eq_length]
+
+theorem length_sub_j_decreasing (var : bmpshft_row_full_in)
+  (hk : (bmpshft_row_full var).k' = some k) :
+  (bmpshft_row_in_next var hk).cells.length - (bmpshft_row_in_next var hk).j <
+  var.cells.length - var.j := by
+  rw [length_bmpshft_row_in_next, bmpshft_row_in_next]
+  simp_rw [bmpshft_row_full]
+  split
+  · case _ =>
+    simp only
+    omega
+  · case _ hj_eq_len =>
+    rw[bmpshft_row_full] at hk
+    simp[hj_eq_len] at hk
 
 def bmpshft_ind (var : bmpshft_row_full_in) : bmpshft_ind_out :=
   let var_out := bmpshft_row_full var
@@ -836,14 +883,7 @@ def bmpshft_ind (var : bmpshft_row_full_in) : bmpshft_ind_out :=
     ⟩
   termination_by var.cells.length - var.j
   decreasing_by
-  · rw[bmpshft_row_in_next]
-    simp_rw[bmpshft_row_full]
-    split
-    · case _ =>
-      simp
-      omega
-    · case _ hj_eq_len =>
-      simp[hvar_out_eq, bmpshft_row_full, hj_eq_len] at hk
+  exact length_sub_j_decreasing _ _
 
 theorem bmpshft_ind_start (var : bmpshft_row_full_in) :
   (bmpshft_ind var).j_start = var.j := by
@@ -967,7 +1007,7 @@ theorem bmpshft_ind_left_inverse (var : bmpshft_row_full_in) :
       nth_rewrite 2 [bmpshft_row_in_next] at hj_gt
       simp only [bmpshft_row_full_j] at hj_gt
       omega
-    simp[bmpshft_row_full_inv_j, bmpshft_ind_start, not_next_row]
+    simp only [bmpshft_ind_start, not_next_row, ↓reduceDIte]
 
     have hstart_pos : (bmpshft_ind (bmpshft_row_in_next var hk'_some)).j_start > 0 := by
       rw[bmpshft_ind_start]
@@ -998,18 +1038,12 @@ theorem bmpshft_ind_left_inverse (var : bmpshft_row_full_in) :
       rw[hbmpshft_ind_out]
       exact bmpshft_ind_left_inverse _
     simp_rw [cancel_by_induction]
-    simp [bmpshft_row_in_next]
+    simp only [bmpshft_row_in_next, add_tsub_cancel_right]
     simp_rw[←hk'_some, switch_bmpshft_row_full]
     exact bmpshft_row_full_left_inverse var
   termination_by var.cells.length - var.j
-  decreasing_by -- NOTE : SAME AS bmpshft_ind
-  simp_rw[bmpshft_row_in_next, bmpshft_row_full]
-  split
-  · case _ =>
-    simp
-    omega
-  · case _ eq_some hj_eq_len =>
-    simp[bmpshft_row_full, hj_eq_len] at eq_some
+  decreasing_by
+  exact length_sub_j_decreasing _ _
 
 theorem switch_bmpshft_row_inv_full :
   ⟨(bmpshft_ind_inv var).val.cells,
@@ -1100,6 +1134,45 @@ theorem bmpshft_ind_right_inverse (var : bmpshft_ind_out) :
   have := var.hj_start_le_j
   omega
 
+theorem shape_bmpshft_ind (var : bmpshft_row_full_in) :
+  have var_out := (bmpshft_ind var).var_out
+  shape var_out.cells = if hj_lt_len : var_out.j < var.cells.length then
+    (shape var.cells).modify (var_out.j) (· + 1)
+  else
+    (shape var.cells) ++ [1] := by
+  rw[bmpshft_ind]
+  split
+  · case _ his_none =>
+    simp only [bmpshft_row_full] at his_none
+    split at his_none
+    · case _ hj_lt_len =>
+      simp only at his_none
+      simp only [bmpshft_row_full, hj_lt_len, ↓reduceDIte, bmpshft_row]
+      split
+      · case _ =>
+        simp only
+        exact shape_add var.cells var.k var.j (of_eq_true (eq_true hj_lt_len))
+      · case _ his_some _ =>
+        simp_rw[bmpshft_row] at his_none
+        split at his_none
+        · case _ his_none₂ _ =>
+          rw[his_some] at his_none₂
+          contradiction
+        · case _ =>
+          contradiction
+    · case _ hj_eq_len =>
+      simp only [bmpshft_row_full, hj_eq_len, ↓reduceDIte]
+      rw[shape, List.map_append, List.map_singleton, List.length_singleton, ←shape]
+  · case _ his_some =>
+    simp only [dite_eq_ite]
+    have ih := shape_bmpshft_ind (bmpshft_row_in_next var his_some)
+    simp only [dite_eq_ite] at ih
+    rw[←shape_length_eq_length, shape_bmpshft_row_in_next, shape_length_eq_length] at ih
+    exact ih
+  termination_by var.cells.length - var.j
+  decreasing_by
+  exact length_sub_j_decreasing _ _
+
 structure bmpshft_in where
   cells : Grid
   hSSYT : IsSSYT cells
@@ -1129,7 +1202,7 @@ def bmpshft (var : bmpshft_in) : bmpshft_out :=
     out.var_out.hj_lt_len,
     by
       have := out.var_out.h_col
-      simp [out.hk'] at this
+      simp only [out.hk', dite_else_true] at this
       exact this
   ⟩
 
@@ -1187,7 +1260,6 @@ theorem bmpshft_left_inverse (var : bmpshft_in) : bmpshft_inv (bmpshft var) = va
   · rw[left_inverse]
     dsimp[var_in, bmpshft_in_to_bmpshft_row_full_in]
 
-
 theorem bmpshft_right_inverse (var : bmpshft_out) : bmpshft (bmpshft_inv var) = var := by
   rw[bmpshft, bmpshft_inv]
   simp only [bmpshft_in_to_bmpshft_row_full_in]
@@ -1212,8 +1284,152 @@ theorem bmpshft_right_inverse (var : bmpshft_out) : bmpshft (bmpshft_inv var) = 
   · rw[right_inverse]
     simp_rw[var_out, bmpshft_out_to_bmpshft_ind_out]
 
-#eval bmpshft ⟨[[1, 2, 2, 3], [2, 3, 4], [5]], by grind[IsSSYT, IsWeakInc, IsRowInc, IsMonotone, row_comp], 2⟩
-#eval! bmpshft_inv (bmpshft ⟨[[1, 2, 2, 3], [2, 3, 4], [5]], by grind[IsSSYT, IsWeakInc, IsRowInc, IsMonotone, row_comp], 2⟩)
+theorem shape_bmpshft (var : bmpshft_in) :
+  let var_out := bmpshft var
+  shape var_out.cells = if var_out.j < var.cells.length then
+    (shape var.cells).modify (var_out.j) (· + 1)
+  else
+    (shape var.cells) ++ [1] := by
+  simp only[bmpshft]
+  exact shape_bmpshft_ind (bmpshft_in_to_bmpshft_row_full_in var)
 
-#eval bmpshft ⟨[[1, 2, 2, 4], [2, 3, 4], [5]], by grind[IsSSYT, IsWeakInc, IsRowInc, IsMonotone, row_comp], 2⟩
-#eval! bmpshft_inv (bmpshft ⟨[[1, 2, 2, 3], [2, 3, 4], [5]], by grind[IsSSYT, IsWeakInc, IsRowInc, IsMonotone, row_comp], 2⟩)
+theorem length_bmpshft_lt_succ (var : bmpshft_in) :
+  var.cells.length + 1 ≥ (bmpshft var).cells.length := by
+  nth_rewrite 2 [←shape_length_eq_length]
+  rw[shape_bmpshft]
+  split
+  · case _ =>
+      rw[List.length_modify, shape_length_eq_length]
+      exact Nat.le_add_right _ 1
+  · case _ =>
+      rw[List.length_append, List.length_singleton, shape_length_eq_length]
+
+
+-- #eval bmpshft ⟨[[1, 2, 2, 3], [2, 3, 4], [5]], by grind[IsSSYT, IsWeakInc, IsRowInc, IsMonotone, row_comp], 2⟩
+-- #eval! bmpshft_inv (bmpshft ⟨[[1, 2, 2, 3], [2, 3, 4], [5]], by grind[IsSSYT, IsWeakInc, IsRowInc, IsMonotone, row_comp], 2⟩)
+
+-- #eval bmpshft ⟨[[1, 2, 2, 4], [2, 3, 4], [5]], by grind[IsSSYT, IsWeakInc, IsRowInc, IsMonotone, row_comp], 2⟩
+-- #eval! bmpshft_inv (bmpshft ⟨[[1, 2, 2, 3], [2, 3, 4], [5]], by grind[IsSSYT, IsWeakInc, IsRowInc, IsMonotone, row_comp], 2⟩)
+
+structure PQ_pair where
+  P : Grid
+  Q : Grid
+  hSSYT : IsSSYT P
+  hSYT : IsSYT Q
+  hShape : shape P = shape Q
+
+structure RSK_step_in where
+  k : Nat
+  pair : PQ_pair
+
+example (a : Nat) (h : a > 0) : (a > a - 1) := by exact Nat.sub_one_lt_of_lt h
+
+def RSK_step (var : RSK_step_in) : PQ_pair :=
+  let ⟨k, ⟨P, Q, hSSYT, hSYT, hShape⟩⟩ := var
+  let step := bmpshft ⟨P, hSSYT, k⟩
+  have hstep_eq : step = bmpshft ⟨P, hSSYT, k⟩ := by rfl
+  let ⟨P₂, hSSYT₂, j, hj_lt_lenP₂, hend_colP₂⟩ := step
+  have shapeP₂ := shape_bmpshft ⟨P, hSSYT, k⟩
+  have hj_lt_lenQ : j ≤ Q.length := by
+    have := length_bmpshft_lt_succ ⟨P, hSSYT, k⟩
+    rw[←hstep_eq] at this
+    simp only at this
+    rw[←length_eq_of_shape_eq hShape]
+    omega
+  have h_col :
+    if hzero_lt_j_lt_len : 0 < j ∧ j < List.length Q then
+      Q[j].length < Q[j - 1].length
+    else
+      True := by
+    split
+    · case _ between =>
+      simp only at shapeP₂
+      rw[←hstep_eq] at shapeP₂
+      rw[←length_eq_of_shape_eq hShape] at between
+      simp only [between, ↓reduceIte] at shapeP₂
+      repeat rw[rowlen_eq_shape]
+      simp_rw[←hShape]
+      have hj_lt_lenshape := between.right
+      rw[←shape_length_eq_length] at hj_lt_lenshape
+      have hj_lt_lenshapeP₂ : j < (shape P₂).length := by
+        rw[←shape_length_eq_length] at hj_lt_lenP₂
+        exact hj_lt_lenP₂
+      have hShapePj : (shape P)[j] + 1 = (shape P₂)[j] := by
+        simp_rw[shapeP₂, List.getElem_modify_eq]
+      have hShapePsubj : (shape P)[j - 1] = (shape P₂)[j - 1] := by
+        simp_rw[shapeP₂]
+        apply Eq.symm (List.getElem_modify_ne _ _ _ _)
+        omega
+      have := diagram_decreasing hSSYT₂ (j - 1) j (Nat.sub_one_lt_of_lt between.left) hj_lt_lenP₂
+      repeat rw[rowlen_eq_shape] at this
+      omega
+    · case _ => trivial
+  ⟨P₂,
+  SYT_add_cells Q j,
+  hSSYT₂,
+  SYT_add hSYT j hj_lt_lenQ h_col,
+  by
+    rw[←hstep_eq] at shapeP₂
+    simp only at shapeP₂
+    rw[SYT_add_cells]
+    split
+    · case _ j_lt_len_Q =>
+      rw[length_eq_of_shape_eq hShape] at shapeP₂
+      simp only [j_lt_len_Q, ↓reduceIte] at shapeP₂
+      rw[shapeP₂]
+      apply List.ext_getElem
+      · rw[List.length_modify, shape_length_eq_length, shape_length_eq_length, List.length_set]
+        exact length_eq_of_shape_eq hShape
+      · intro i hi₁ hi₂
+        if hi_eq_j : i = j then
+          simp_rw[hi_eq_j]
+          simp_rw[hi_eq_j, List.length_modify] at hi₁
+          simp_rw[hi_eq_j] at hi₂
+          rw[List.getElem_modify_eq, ←rowlen_eq_shape, ←rowlen_eq_shape, List.getElem_set_self,
+            List.length_append, List.length_singleton]
+          · repeat rw[rowlen_eq_shape]
+            simp_rw[hShape]
+          · simp_rw[←shape_length_eq_length]
+            exact hi₂
+          · simp_rw[←shape_length_eq_length]
+            exact hi₁
+        else
+          rw[List.getElem_modify_ne, ←rowlen_eq_shape, ←rowlen_eq_shape, List.getElem_set_ne]
+          · repeat rw[rowlen_eq_shape]
+            simp_rw[hShape]
+          · exact Ne.symm hi_eq_j
+          · simp_rw[←shape_length_eq_length]
+            exact hi₂
+          · rw[List.length_modify, shape_length_eq_length] at hi₁
+            exact hi₁
+          · exact Ne.symm hi_eq_j
+    · case _ j_eq_len_Q =>
+      rw[length_eq_of_shape_eq hShape] at shapeP₂
+      simp only [j_eq_len_Q, ↓reduceIte] at shapeP₂
+      rw[shapeP₂]
+      apply List.ext_getElem
+      · rw[List.length_append, List.length_singleton, shape_length_eq_length,
+          shape_length_eq_length, List.length_append, List.length_singleton,
+          length_eq_of_shape_eq hShape]
+      · intro i hi₁ hi₂
+        if hi_eq_j : i = P.length then
+          repeat simp_rw[hi_eq_j, shape, List.getElem_map]
+          repeat rw[List.getElem_append_right, List.getElem_singleton]
+          · exact Eq.symm List.length_singleton
+          · exact Nat.le_of_eq (Eq.symm (length_eq_of_shape_eq hShape))
+          · rw[List.length_map]
+        else
+          rw[List.length_append, List.length_singleton] at hi₁
+          repeat simp_rw[shape]
+          rw[List.getElem_map]
+          repeat rw[List.getElem_append_left]
+          · rw[List.getElem_map]
+            repeat rw[rowlen_eq_shape]
+            simp_rw[hShape]
+          · simp_rw[hShape, shape_length_eq_length] at hi₁
+            rw[length_eq_of_shape_eq hShape] at hi_eq_j
+            omega
+          · rw[shape_length_eq_length] at hi₁
+            rw[List.length_map]
+            omega
+  ⟩

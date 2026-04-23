@@ -21,6 +21,24 @@ theorem size_eq_entries_len (cells : Grid) :
 theorem shape_length_eq_length {cells : Grid} : (shape cells).length = cells.length := by
   rw[shape, List.length_map]
 
+theorem length_eq_of_shape_eq :
+  shape cells₁ = shape cells₂ → cells₁.length = cells₂.length := by
+  intro shape_eq
+  repeat rw[←shape_length_eq_length]
+  rw[shape_eq]
+
+theorem rowlen_eq_shape (cells : Grid) (j : Nat) (hj : j < cells.length) :
+  cells[j].length = (shape cells)[j]'(by rw[shape_length_eq_length]; exact hj) := by
+  simp_rw[shape, List.getElem_map]
+
+theorem shape_increasing (hSSYT : IsSSYT cells) : IsWeakDec (shape cells) := by
+  refine wkdec_wkdec2.mpr ?_
+  rw[IsWeakDec2, IsMonotone2]
+  intro i j h₁ h₂
+  rw[shape_length_eq_length] at h₂
+  repeat rw[←rowlen_eq_shape]
+  exact diagram_decreasing hSSYT i j h₁ h₂
+
 theorem memEntry_of_memRow (cells : Grid) (j k : Nat)
   (hj : j < cells.length) (hrow : k ∈ cells[j]) :
   k ∈ entries cells := by
@@ -403,28 +421,62 @@ def SYT_size_location_col (hSYT : IsSYT cells) (hnot_nil : cells ≠ []) :
 
 example (a b : Nat) (l : List Nat) : (a :: l) = ([a] ++ l) := by exact Eq.symm List.singleton_append
 
+@[simp]
+def SYT_add_cells (cells : Grid) (j : Nat) : Grid :=
+  if hj_le_len : j < cells.length then
+    cells.set j (cells[j] ++ [size cells])
+  else
+    cells ++ [[size cells]]
+
 theorem SYT_add (hSYT : IsSYT cells) (j : Nat)
-  (hj_lt_len : j < cells.length)
-  (h_col : j = 0 ∨ cells[j].length < cells[j - 1].length) :
-  IsSYT (cells.set j (cells[j] ++ [size cells])) := by
-  constructor
-  · rw[size_add]
-    apply (List.Perm.congr_left (entries_add cells (size cells) j hj_lt_len) _).mpr
-    rw[List.range_succ]
-    nth_rewrite 1 [←List.singleton_append]
-    apply (List.Perm.congr_right List.perm_append_comm _).mp
-    apply List.Perm.append
-    · trivial
-    · exact hSYT.left
-  · apply SSYT_append (SYT_SSYT hSYT) j ((size cells))
-    · apply wkinc_append_wkinc (SSYT_row_weak (SYT_SSYT hSYT) j hj_lt_len) _
-      rw[List.getLast?_eq_some_getLast (SSYT_row_not_nil (SYT_SSYT hSYT) _ _)]
-      rw[op_le_some, List.getLast_eq_getElem]
-      exact Nat.le_of_succ_le (SYT_mem_le hSYT _ _ _ _)
-    · split
+  (hj_lt_len : j ≤ cells.length)
+  (h_col :
+    if hzero_lt_j_lt_len : 0 < j ∧ j < cells.length then
+      cells[j].length < cells[j - 1].length
+    else
+      True) :
+  IsSYT (SYT_add_cells cells j) := by
+  have hSSYT := SYT_SSYT hSYT
+  rw[SYT_add_cells]
+  split
+  · case _ hj_lt_len =>
+    constructor
+    · rw[size_add]
+      apply (List.Perm.congr_left (entries_add cells (size cells) j hj_lt_len) _).mpr
+      rw[List.range_succ]
+      nth_rewrite 1 [←List.singleton_append]
+      apply (List.Perm.congr_right List.perm_append_comm _).mp
+      apply List.Perm.append
       · trivial
-      · exact (SYT_mem_le hSYT _ _ _ _)
-    · exact h_col
+      · exact hSYT.left
+    · apply SSYT_append hSSYT j ((size cells))
+      · apply wkinc_append_wkinc (SSYT_row_weak hSSYT j hj_lt_len) _
+        rw[List.getLast?_eq_some_getLast (SSYT_row_not_nil hSSYT _ _)]
+        rw[op_le_some, List.getLast_eq_getElem]
+        exact Nat.le_of_succ_le (SYT_mem_le hSYT _ _ _ _)
+      · split
+        · trivial
+        · exact (SYT_mem_le hSYT _ _ _ _)
+      · if hj : j = 0 then
+          exact Or.inl hj
+        else
+          simp only [Nat.zero_lt_of_ne_zero hj, hj_lt_len, and_self, ↓reduceDIte] at h_col
+          exact Or.inr h_col
+  · case _ =>
+    constructor
+    · nth_rewrite 2 [←size_eq_entries_len]
+      rw[entries, List.flatten_append, List.flatten_singleton, List.length_append,
+        List.length_singleton, List.range_succ, ←entries, size_eq_entries_len]
+      exact List.Perm.append hSYT.left (List.singleton_perm_singleton.mpr rfl)
+    · apply SSYT_append_row hSSYT (size cells) ?_
+      split
+      · case _ => trivial
+      · case _ hlen_ne_zero =>
+        have hsublen_lt_len := Nat.sub_one_lt hlen_ne_zero
+        have hnot_nil := SSYT_row_not_nil hSSYT (cells.length - 1) hsublen_lt_len
+        have hzero_lt_row := List.length_pos_iff.mpr hnot_nil
+        exact SYT_mem_le hSYT 0 (cells.length - 1) hsublen_lt_len hzero_lt_row
+
 
 @[simp]
 def SYT_remove_cells (hSYT : IsSYT cells) (hnot_nil : cells ≠ []) : Grid :=
