@@ -1322,9 +1322,13 @@ structure RSK_step_in where
   k : Nat
   pair : PQ_pair
 
+structure RSK_step_out where
+  pair : PQ_pair
+  hnot_nil : pair.P ≠ []
+
 example (a : Nat) (h : a > 0) : (a > a - 1) := by exact Nat.sub_one_lt_of_lt h
 
-def RSK_step (var : RSK_step_in) : PQ_pair :=
+def RSK_step (var : RSK_step_in) : RSK_step_out :=
   let ⟨k, ⟨P, Q, hSSYT, hSYT, hShape⟩⟩ := var
   let step := bmpshft ⟨P, hSSYT, k⟩
   have hstep_eq : step = bmpshft ⟨P, hSSYT, k⟩ := by rfl
@@ -1364,10 +1368,10 @@ def RSK_step (var : RSK_step_in) : PQ_pair :=
       repeat rw[rowlen_eq_shape] at this
       omega
     · case _ => trivial
-  ⟨P₂,
+  ⟨⟨P₂,
   SYT_add_cells Q j,
   hSSYT₂,
-  SYT_add hSYT j hj_lt_lenQ h_col,
+  SYT_add hSYT j h_col,
   by
     rw[←hstep_eq] at shapeP₂
     simp only at shapeP₂
@@ -1432,4 +1436,77 @@ def RSK_step (var : RSK_step_in) : PQ_pair :=
           · rw[shape_length_eq_length] at hi₁
             rw[List.length_map]
             omega
+  ⟩,
+  by
+    simp only
+    exact List.length_pos_iff.mp (Nat.zero_lt_of_lt hj_lt_lenP₂)
   ⟩
+
+def RSK_step_inv (pair : RSK_step_out) : RSK_step_in :=
+  have ⟨⟨P, Q, hSSYT, hSYT, hshape⟩, hPnot_nil⟩ := pair
+  have hlen_eq : P.length = Q.length := length_eq_of_shape_eq hshape
+  have hrowlen : ∀(j : Nat) (hj : j < P.length), P[j].length = Q[j].length := by
+    intro j hj
+    simp_rw[rowlen_eq_shape, ←hshape]
+  have hQnot_nil : Q ≠ [] := by
+    apply List.length_pos_iff.mp
+    rw[←hlen_eq]
+    apply List.length_pos_iff.mpr
+    exact hPnot_nil
+  let loc := SYT_size_location hSYT hQnot_nil
+  have hj_lt_len := loc.hj_lt_len
+  have hj_lt_len_P : loc.j < P.length := by omega
+  have hi_lt_len := loc.hi_lt_len
+  have hi_lt_len_P : loc.i < P[loc.j].length := by
+    rw[hrowlen loc.j hj_lt_len_P]
+    exact hi_lt_len
+  have loc_eq : loc = SYT_size_location hSYT hQnot_nil := by rfl
+  have ef : loc.j < P.length := by
+    rw[hlen_eq]
+    exact loc.hj_lt_len
+  have hSSYT₂ := SSYT_remove hSSYT loc.j ef (by
+    have := SYT_size_location_hcol hSYT hQnot_nil
+    simp_rw[←loc_eq, ←hlen_eq, rowlen_eq_shape, ←hshape] at this
+    repeat simp_rw[rowlen_eq_shape]
+    exact this
+    )
+  have hSYT₂ := SYT_remove hSYT hQnot_nil
+  ⟨
+    P[loc.j][loc.i],
+    ⟨if P[loc.j].length > 1 then
+      List.set P loc.j P[loc.j].dropLast
+     else
+      List.dropLast P,
+    SYT_remove_cells hSYT hQnot_nil,
+    by
+      rw[apply_ite IsSSYT]
+      exact hSSYT₂,
+    hSYT₂,
+    by
+      split
+      · case _ hrow_gt_one =>
+        simp_rw[SYT_remove_cells, ←loc_eq]
+        simp_rw[←hrowlen loc.j hj_lt_len_P, hrow_gt_one, reduceIte]
+        apply List.ext_getElem
+        · repeat rw[shape, List.length_map, List.length_set]
+          exact hlen_eq
+        · intro n hn₁ hn₂
+          if hn_eq_j : n = loc.j then
+            repeat simp_rw[hn_eq_j, shape, List.getElem_map, List.getElem_set_self,
+              List.length_dropLast]
+            rw[hrowlen loc.j hj_lt_len_P]
+          else
+            rw[shape, List.length_map, List.length_set] at hn₁
+            repeat simp_rw[shape, List.getElem_map, List.getElem_set_ne (Ne.symm hn_eq_j)]
+            exact hrowlen n hn₁
+      · case _ hnrow_gt_one =>
+        simp_rw[SYT_remove_cells, ←loc_eq]
+        simp_rw[←hrowlen loc.j hj_lt_len_P, hnrow_gt_one, reduceIte, shape, List.map_dropLast,
+          ←shape.eq_def, hshape]
+    ⟩
+  ⟩
+
+theorem RSK_step_right_inverse (var : RSK_step_out) :
+  RSK_step (RSK_step_inv var) = var := by
+  rw[RSK_step_inv, RSK_step]
+  simp only
