@@ -13,6 +13,7 @@ def shape (cells : Grid) : List Nat :=
 def size (cells : Grid) : Nat :=
   (shape cells).sum
 
+/-- The size of a Grid is the number of entries -/
 theorem size_eq_entries_len (cells : Grid) :
   (entries cells).length = size cells := by
   rw[entries]
@@ -20,6 +21,14 @@ theorem size_eq_entries_len (cells : Grid) :
 
 theorem shape_length_eq_length {cells : Grid} : (shape cells).length = cells.length := by
   rw[shape, List.length_map]
+
+theorem shape_set :
+  shape (cells.set i row) = (shape cells).set i row.length := by
+  rw[shape, List.map_set, ←shape]
+
+theorem shape_dropLast :
+  shape (cells.dropLast) = (shape cells).dropLast := by
+  rw[shape, List.map_dropLast, ←shape]
 
 theorem length_eq_of_shape_eq :
   shape cells₁ = shape cells₂ → cells₁.length = cells₂.length := by
@@ -150,6 +159,7 @@ theorem count_dropLast (l : List Nat) (hnot_nil : l ≠ []) :
         simp[Ne.symm hk_last]
     · exact hsub_notnil
 
+/-- Removing an element from a grid also removes it from its entries. -/
 theorem entries_remove (cells : Grid) (j : Nat)
   (hj_lt_len : j < cells.length) (hnot_nil : cells[j] ≠ []) :
   List.Perm (entries (cells.set j (cells[j].dropLast)))
@@ -608,5 +618,62 @@ theorem SYT_remove (hSYT : IsSYT cells) (hnot_nil : cells ≠ []) :
     apply SSYT_remove (hSSYT)
     exact SYT_size_location_hcol hSYT hnot_nil
 
+theorem SYT_add_right_inverse (hSYT : IsSYT SYT) (hnot_nil : SYT ≠ []) :
+  SYT_add_cells (SYT_remove_cells hSYT hnot_nil) (SYT_size_location hSYT hnot_nil).j = SYT := by
+  let loc := SYT_size_location hSYT hnot_nil
+  have hloc_eq : loc = SYT_size_location hSYT hnot_nil := by rfl
+  rw[SYT_remove_cells]
+  simp_rw[←hloc_eq]
+  have hj_lt_len := loc.hj_lt_len
+  have hi_lt_len := loc.hi_lt_len
+  have hlenj_ne_nil : SYT[loc.j] ≠ [] := by
+    exact SSYT_row_not_nil (SYT_SSYT hSYT) loc.j hj_lt_len
+  have hi_eq := SYT_size_location_col hSYT hnot_nil
+  rw[←hloc_eq] at hi_eq
+  split
+  · case _ =>
+    simp_rw[SYT_add_cells, List.length_set, loc.hj_lt_len, reduceDIte]
+    apply List.ext_getElem
+    · repeat rw[List.length_set]
+    · intro i hi_lt_len₁ hi_lt_len₂
+      if hi_eq_j : i = loc.j then
+        simp_rw[hi_eq_j]
+        repeat rw[List.getElem_set_self]
+        rw[size_remove (hnot_nil:=hlenj_ne_nil)]
+        simp_rw[loc.eq, hi_eq]
+        rw[←List.getLast_eq_getElem]
+        exact List.dropLast_append_getLast hlenj_ne_nil
+      else
+        repeat rw[List.getElem_set_ne (Ne.symm hi_eq_j)]
+  · case _ hlenj_one₂ =>
+    have hlenj_one : SYT[loc.j].length = 1 := by
+      have := List.length_pos_iff.mpr hlenj_ne_nil
+      omega
+    simp_rw[hlenj_one, Nat.add_one_sub_one] at hi_eq
+    have hj_eq_sublen : loc.j = SYT.length - 1 := by
+      by_contra hP
+      have hj_lt_sublen : loc.j < SYT.length - 1 := by omega
+      have hsublen_lt_len : SYT.length - 1 < SYT.length := by exact Nat.sub_one_lt_of_lt hj_lt_len
+      have hsublen_length_pos := List.length_pos_iff.mpr
+        (SSYT_row_not_nil (SYT_SSYT hSYT) (SYT.length - 1) hsublen_lt_len)
+      have eq_size := loc.eq
+      simp_rw[hi_eq] at eq_size
+      have col_inc := SSYT_col_increasing (SYT_SSYT hSYT) 0 loc.j (SYT.length - 1)
+        hj_lt_sublen hsublen_lt_len hsublen_length_pos
+      simp only at col_inc
+      rw[←eq_size] at col_inc
+      have := SYT_mem_le hSYT 0 (SYT.length - 1) hsublen_lt_len hsublen_length_pos
+      omega
+    simp_rw[SYT_add_cells, List.length_dropLast, hj_eq_sublen, lt_self_iff_false, reduceDIte]
+    simp_rw[hj_eq_sublen] at hlenj_one
+    rw[←List.getLast_eq_getElem hnot_nil] at hlenj_one
+    rw[size_dropLast SYT hnot_nil hlenj_one]
+    simp_rw[loc.eq, hi_eq, hj_eq_sublen, ←List.getLast_eq_getElem hnot_nil,
+      ←List.eq_getElem_of_length_eq_one (List.getLast SYT hnot_nil) hlenj_one,
+      List.dropLast_append_getLast]
 
+
+
+example (l : List Nat) (h : l.length = 1) : [l[0]] = l := by exact?
 example (a b : Nat) (h : a < b) : a ≤ b := by exact Nat.le_of_succ_le h
+example : 1 - 1 = 0 := by exact Nat.add_one_sub_one 0

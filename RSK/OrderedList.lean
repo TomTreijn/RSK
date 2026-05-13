@@ -10,21 +10,34 @@ def op_lt (a b : Option Nat) := option_r (· < ·) a b
 def op_le (a b : Option Nat) := option_r (· ≤ ·) a b
 def op_ge (a b : Option Nat) := option_r (· ≥ ·) a b
 
+@[simp]
 theorem option_r_some : option_r r (some a) (some b) = (r a b) := by rfl
+@[simp]
 theorem op_le_some : op_le (some a) (some b) = (a ≤ b) := by rfl
+@[simp]
 theorem op_lt_some : op_lt (some a) (some b) = (a < b) := by rfl
+@[simp]
 theorem op_ge_some : op_ge (some a) (some b) = (a ≥ b) := by rfl
 
+@[simp]
 theorem option_r_left_none r : option_r r (none) (b) := by simp only [option_r.eq_def]
+@[simp]
 theorem op_le_none_l : op_le none a := option_r_left_none (· ≤ ·)
+@[simp]
 theorem op_lt_none_l : op_lt none a := option_r_left_none (· < ·)
+@[simp]
 theorem op_ge_none_l : op_ge none a := option_r_left_none (· ≥ ·)
 
+@[simp]
 theorem option_r_right_none r : option_r r (a) (none) := by simp only [option_r.eq_def]
+@[simp]
 theorem op_le_none_r : op_le a none := option_r_right_none (· ≤ ·)
+@[simp]
 theorem op_lt_none_r : op_lt a none := option_r_right_none (· < ·)
+@[simp]
 theorem op_ge_none_r : op_ge a none := option_r_right_none (· ≥ ·)
 
+/-- A monotone list is a list where each subsequent pair of entries obeys the relation r -/
 def IsMonotone {α : Type} (r : α → α → Prop) (list : List α) : Prop :=
   match list with
   | [] => True
