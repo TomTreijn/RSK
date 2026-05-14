@@ -36,9 +36,16 @@ theorem length_eq_of_shape_eq :
   repeat rw[←shape_length_eq_length]
   rw[shape_eq]
 
+theorem shape_eq_notnil_eq :
+  shape cells₁ = shape cells₂ → (cells₁ ≠ [] ↔ cells₂ ≠ []) := by
+  intro hshape
+  repeat rw[←List.length_pos_iff]
+  rw[length_eq_of_shape_eq hshape]
+
 theorem rowlen_eq_shape (cells : Grid) (j : Nat) (hj : j < cells.length) :
   cells[j].length = (shape cells)[j]'(by rw[shape_length_eq_length]; exact hj) := by
   simp_rw[shape, List.getElem_map]
+
 
 theorem shape_increasing (hSSYT : IsSSYT cells) : IsWeakDec (shape cells) := by
   refine wkdec_wkdec2.mpr ?_
@@ -251,6 +258,10 @@ theorem size_add (cells : Grid) (k j : Nat)
   rw[entries_add_rw, List.length_cons]
   rw[size_eq_entries_len]
 
+theorem size_append (cells : Grid) : size (cells ++ [[k]]) = size cells + 1 := by
+  rw[size, shape, List.map_append, List.map_singleton, List.length_singleton, List.sum_append,
+    List.sum_singleton, ←shape, ←size]
+
 theorem size_remove (cells : Grid) (j : Nat)
   (hj_lt_len : j < cells.length) (hnot_nil : cells[j] ≠ []) :
   size (cells.set j (cells[j].dropLast)) = size cells - 1 := by
@@ -338,7 +349,7 @@ theorem SYT_size_mem (hSYT : IsSYT cells) (hnot_nil : cells ≠ []) :
   have size_pos : size cells > 0 := (SSYT_size_nzero_nnil (SYT_SSYT hSYT)).mpr hnot_nil
   exact SYT_le_mem hSYT (size cells - 1) (Nat.sub_one_lt_of_lt size_pos)
 
-theorem SYT_mem_le (hSYT : IsSYT cells) (i j : Nat)
+theorem SYT_getElem_le (hSYT : IsSYT cells) (i j : Nat)
   (hj : j < cells.length) (hi : i < cells[j].length) :
   cells[j][i] < size cells := by
   have hji_mem := getElem_entry cells i j hj hi
@@ -407,16 +418,16 @@ theorem SYT_row_increasing (hSYT : IsSYT cells)
   have := SYT_Nodup hSYT j j i₁ i₂ hj_lt_len hj_lt_len (by omega) hi₂_lt_len neq
   omega
 
-def SYT_size_location (hSYT : IsSYT cells) (hnot_nil : cells ≠ []) :
+def SYT_size_location (cells : Grid) (hSYT : IsSYT cells) (hnot_nil : cells ≠ []) :
   location cells (size cells - 1) :=
   entry_location cells (size cells - 1) (SYT_size_mem hSYT hnot_nil)
 
 def SYT_size_location_col (hSYT : IsSYT cells) (hnot_nil : cells ≠ []) :
-  let location := SYT_size_location hSYT hnot_nil
+  let location := SYT_size_location cells hSYT hnot_nil
   have := location.hj_lt_len
   location.i = cells[location.j].length - 1 := by
-  let location := SYT_size_location hSYT hnot_nil
-  have hlocation_eq : location = SYT_size_location hSYT hnot_nil := by rfl
+  let location := SYT_size_location cells hSYT hnot_nil
+  have hlocation_eq : location = SYT_size_location cells hSYT hnot_nil := by rfl
   simp only
   rw[←hlocation_eq]
   by_contra hP
@@ -424,19 +435,20 @@ def SYT_size_location_col (hSYT : IsSYT cells) (hnot_nil : cells ≠ []) :
   have hi_lt_len := location.hi_lt_len
   have hsub_i_lt_len : location.i < cells[location.j].length - 1 := by omega
   have hsublen_lt_len : cells[location.j].length - 1 < cells[location.j].length := by omega
-  have hrow_inc := SYT_row_increasing hSYT location.i (cells[location.j].length -1) location.j hj_lt_len hsub_i_lt_len hsublen_lt_len
+  have hrow_inc := SYT_row_increasing hSYT location.i (cells[location.j].length -1)
+    location.j hj_lt_len hsub_i_lt_len hsublen_lt_len
   rw[←location.eq] at hrow_inc
-  have := SYT_mem_le hSYT (cells[location.j].length - 1) location.j hj_lt_len hsublen_lt_len
+  have := SYT_getElem_le hSYT (cells[location.j].length - 1) location.j hj_lt_len hsublen_lt_len
   omega
 
 theorem SYT_size_location_hcol (hSYT : IsSYT cells) (hnot_nil : cells ≠ []) :
-  let location := SYT_size_location hSYT hnot_nil
+  let location := SYT_size_location cells hSYT hnot_nil
   if hsuccj_len : location.j + 1 < List.length cells then
     cells[location.j].length > cells[location.j + 1].length
   else
     True := by
-  let location := SYT_size_location hSYT hnot_nil
-  have hlocation_eq : location = SYT_size_location hSYT hnot_nil := by rfl
+  let location := SYT_size_location cells hSYT hnot_nil
+  have hlocation_eq : location = SYT_size_location cells hSYT hnot_nil := by rfl
   simp_rw[←hlocation_eq]
   split
   · case _ hnot_last_row =>
@@ -448,7 +460,7 @@ theorem SYT_size_location_hcol (hSYT : IsSYT cells) (hnot_nil : cells ≠ []) :
       (lt_add_one location.j) hnot_last_row hi_lt_lensuccj
     simp only at hlower_ge
     rw[←location.eq] at hlower_ge
-    have := SYT_mem_le hSYT location.i (location.j + 1) hnot_last_row hi_lt_lensuccj
+    have := SYT_getElem_le hSYT location.i (location.j + 1) hnot_last_row hi_lt_lensuccj
     omega
   · case _ => trivial
 
@@ -461,6 +473,17 @@ def SYT_add_cells (cells : Grid) (j : Nat) : Grid :=
     cells.set j (cells[j] ++ [size cells])
   else
     cells ++ [[size cells]]
+
+theorem SYT_add_cells_not_nil :
+  SYT_add_cells cells j ≠ [] := by
+  rw[SYT_add_cells]
+  split
+  · case _ hj_lt_len =>
+    apply List.length_pos_iff.mp
+    rw[List.length_set]
+    exact Nat.zero_lt_of_lt hj_lt_len
+  · case _ =>
+    exact List.concat_ne_nil [size cells] cells
 
 theorem SYT_add (hSYT : IsSYT cells) (j : Nat)
   (h_col :
@@ -486,10 +509,10 @@ theorem SYT_add (hSYT : IsSYT cells) (j : Nat)
       · apply wkinc_append_wkinc (SSYT_row_weak hSSYT j hj_lt_len) _
         rw[List.getLast?_eq_some_getLast (SSYT_row_not_nil hSSYT _ _)]
         rw[op_le_some, List.getLast_eq_getElem]
-        exact Nat.le_of_succ_le (SYT_mem_le hSYT _ _ _ _)
+        exact Nat.le_of_succ_le (SYT_getElem_le hSYT _ _ _ _)
       · split
         · trivial
-        · exact (SYT_mem_le hSYT _ _ _ _)
+        · exact (SYT_getElem_le hSYT _ _ _ _)
       · if hj : j = 0 then
           exact Or.inl hj
         else
@@ -508,13 +531,13 @@ theorem SYT_add (hSYT : IsSYT cells) (j : Nat)
         have hsublen_lt_len := Nat.sub_one_lt hlen_ne_zero
         have hnot_nil := SSYT_row_not_nil hSSYT (cells.length - 1) hsublen_lt_len
         have hzero_lt_row := List.length_pos_iff.mpr hnot_nil
-        exact SYT_mem_le hSYT 0 (cells.length - 1) hsublen_lt_len hzero_lt_row
+        exact SYT_getElem_le hSYT 0 (cells.length - 1) hsublen_lt_len hzero_lt_row
 
 
 @[simp]
-def SYT_remove_cells (hSYT : IsSYT cells) (hnot_nil : cells ≠ []) : Grid :=
-  let j := (SYT_size_location hSYT hnot_nil).j
-  have hj := (SYT_size_location hSYT hnot_nil).hj_lt_len
+def SYT_remove_cells (cells : Grid) (hSYT : IsSYT cells) (hnot_nil : cells ≠ []) : Grid :=
+  let j := (SYT_size_location cells hSYT hnot_nil).j
+  have hj := (SYT_size_location cells hSYT hnot_nil).hj_lt_len
   if cells[j].length > 1 then
     cells.set j cells[j].dropLast
   else
@@ -524,13 +547,13 @@ example (a : Nat) (h : a > 1) : a > 0 := by exact Nat.zero_lt_of_lt h
 example (a : Nat) (h : a > 0) : a > a - 1 := by exact Nat.sub_one_lt_of_lt h
 
 theorem SYT_remove (hSYT : IsSYT cells) (hnot_nil : cells ≠ []) :
-  IsSYT (SYT_remove_cells hSYT hnot_nil) := by
+  IsSYT (SYT_remove_cells cells hSYT hnot_nil) := by
   have hSSYT := SYT_SSYT hSYT
   have size_pos := (SSYT_size_nzero_nnil (hSSYT)).mpr hnot_nil
   have len_pos := List.length_pos_iff.mpr hnot_nil
   simp only [SYT_remove_cells]
-  let location := SYT_size_location hSYT hnot_nil
-  have hlocation_eq : location = SYT_size_location hSYT hnot_nil := by rfl
+  let location := SYT_size_location cells hSYT hnot_nil
+  have hlocation_eq : location = SYT_size_location cells hSYT hnot_nil := by rfl
   simp_rw[←hlocation_eq]
   have hj_lt_len := location.hj_lt_len
   have hi_lt_len := location.hi_lt_len
@@ -579,7 +602,7 @@ theorem SYT_remove (hSYT : IsSYT cells) (hnot_nil : cells ≠ []) :
         have hzero_lt_len_lowest := List.length_pos_iff.mpr lowest_notnil
         have := SSYT_col_increasing hSSYT 0 location.j (cells.length - 1) (by omega) hsublen_lt_len hzero_lt_len_lowest
         simp only [←hji_eq] at this
-        have := SYT_mem_le hSYT 0 (cells.length - 1) hsublen_lt_len hzero_lt_len_lowest
+        have := SYT_getElem_le hSYT 0 (cells.length - 1) hsublen_lt_len hzero_lt_len_lowest
         have := SYT_Nodup hSYT location.j (cells.length - 1) 0 0 hj_lt_len hsublen_lt_len (Nat.zero_lt_of_lt hi_lt_len) hzero_lt_len_lowest (by simp[hP])
         omega
       have hlast_subsize : cells.getLast hnot_nil = [size cells - 1] := by
@@ -618,15 +641,15 @@ theorem SYT_remove (hSYT : IsSYT cells) (hnot_nil : cells ≠ []) :
     apply SSYT_remove (hSSYT)
     exact SYT_size_location_hcol hSYT hnot_nil
 
-theorem SYT_add_right_inverse (hSYT : IsSYT SYT) (hnot_nil : SYT ≠ []) :
-  SYT_add_cells (SYT_remove_cells hSYT hnot_nil) (SYT_size_location hSYT hnot_nil).j = SYT := by
-  let loc := SYT_size_location hSYT hnot_nil
-  have hloc_eq : loc = SYT_size_location hSYT hnot_nil := by rfl
+theorem SYT_add_right_inverse (hSYT : IsSYT cells) (hnot_nil : cells ≠ []) :
+  SYT_add_cells (SYT_remove_cells cells hSYT hnot_nil) (SYT_size_location cells hSYT hnot_nil).j = cells := by
+  let loc := SYT_size_location cells hSYT hnot_nil
+  have hloc_eq : loc = SYT_size_location cells hSYT hnot_nil := by rfl
   rw[SYT_remove_cells]
   simp_rw[←hloc_eq]
   have hj_lt_len := loc.hj_lt_len
   have hi_lt_len := loc.hi_lt_len
-  have hlenj_ne_nil : SYT[loc.j] ≠ [] := by
+  have hlenj_ne_nil : cells[loc.j] ≠ [] := by
     exact SSYT_row_not_nil (SYT_SSYT hSYT) loc.j hj_lt_len
   have hi_eq := SYT_size_location_col hSYT hnot_nil
   rw[←hloc_eq] at hi_eq
@@ -646,34 +669,91 @@ theorem SYT_add_right_inverse (hSYT : IsSYT SYT) (hnot_nil : SYT ≠ []) :
       else
         repeat rw[List.getElem_set_ne (Ne.symm hi_eq_j)]
   · case _ hlenj_one₂ =>
-    have hlenj_one : SYT[loc.j].length = 1 := by
+    have hlenj_one : cells[loc.j].length = 1 := by
       have := List.length_pos_iff.mpr hlenj_ne_nil
       omega
     simp_rw[hlenj_one, Nat.add_one_sub_one] at hi_eq
-    have hj_eq_sublen : loc.j = SYT.length - 1 := by
+    have hj_eq_sublen : loc.j = cells.length - 1 := by
       by_contra hP
-      have hj_lt_sublen : loc.j < SYT.length - 1 := by omega
-      have hsublen_lt_len : SYT.length - 1 < SYT.length := by exact Nat.sub_one_lt_of_lt hj_lt_len
+      have hj_lt_sublen : loc.j < cells.length - 1 := by omega
+      have hsublen_lt_len : cells.length - 1 < cells.length :=
+        Nat.sub_one_lt_of_lt hj_lt_len
       have hsublen_length_pos := List.length_pos_iff.mpr
-        (SSYT_row_not_nil (SYT_SSYT hSYT) (SYT.length - 1) hsublen_lt_len)
+        (SSYT_row_not_nil (SYT_SSYT hSYT) (cells.length - 1) hsublen_lt_len)
       have eq_size := loc.eq
       simp_rw[hi_eq] at eq_size
-      have col_inc := SSYT_col_increasing (SYT_SSYT hSYT) 0 loc.j (SYT.length - 1)
+      have col_inc := SSYT_col_increasing (SYT_SSYT hSYT) 0 loc.j (cells.length - 1)
         hj_lt_sublen hsublen_lt_len hsublen_length_pos
       simp only at col_inc
       rw[←eq_size] at col_inc
-      have := SYT_mem_le hSYT 0 (SYT.length - 1) hsublen_lt_len hsublen_length_pos
+      have := SYT_getElem_le hSYT 0 (cells.length - 1) hsublen_lt_len hsublen_length_pos
       omega
     simp_rw[SYT_add_cells, List.length_dropLast, hj_eq_sublen, lt_self_iff_false, reduceDIte]
     simp_rw[hj_eq_sublen] at hlenj_one
     rw[←List.getLast_eq_getElem hnot_nil] at hlenj_one
-    rw[size_dropLast SYT hnot_nil hlenj_one]
+    rw[size_dropLast cells hnot_nil hlenj_one]
     simp_rw[loc.eq, hi_eq, hj_eq_sublen, ←List.getLast_eq_getElem hnot_nil,
-      ←List.eq_getElem_of_length_eq_one (List.getLast SYT hnot_nil) hlenj_one,
+      ←List.eq_getElem_of_length_eq_one (List.getLast cells hnot_nil) hlenj_one,
       List.dropLast_append_getLast]
+
+theorem SYT_size_location_add_cells (hSYT : IsSYT cells) (j : Nat) (hj_lt_len : j ≤ cells.length) (h_col) :
+  (SYT_size_location (SYT_add_cells cells j) (SYT_add hSYT j h_col) (SYT_add_cells_not_nil)).j = j
+  := by
+  simp_rw[SYT_size_location, entry_location, SYT_add_cells]
+  split
+  · case _ hj_lt_len =>
+    rw[size_add, Nat.add_sub_self_right]
+    refine (List.findIdx_eq ?_).mpr ?_
+    · rw[List.length_set]
+      exact hj_lt_len
+    · constructor
+      · rw[List.getElem_set_self, decide_eq_true_iff.mpr]
+        exact List.mem_concat_self
+      · intro j₂ hj₂_lt_j
+        have hj₂_ne_j : j ≠ j₂ := Ne.symm (Nat.ne_of_lt hj₂_lt_j)
+        have hj₂_lt_len : j₂ < cells.length := Nat.lt_trans hj₂_lt_j hj_lt_len
+        rw[List.getElem_set_ne hj₂_ne_j, decide_eq_false_iff_not, List.mem_iff_getElem]
+        apply not_exists_mem.mpr
+        intro i hi_lt_len
+        exact Nat.ne_of_lt (SYT_getElem_le hSYT i j₂ hj₂_lt_len hi_lt_len)
+  · case _ hj =>
+    have hj_eq_len : j = cells.length := by omega
+    have hj_lt_nlen : j < (cells ++ [[size cells]]).length := by
+      rw[List.length_append, List.length_singleton]
+      omega
+    apply (List.findIdx_eq hj_lt_nlen).mpr
+    simp_rw[hj_eq_len]
+    rw[size_append, Nat.add_sub_self_right]
+    constructor
+    · rw[decide_eq_true_iff.mpr]
+      rw[List.getElem_append_right (by omega), List.getElem_singleton, List.mem_singleton]
+    · intro j₂ hj₂_lt_len
+      rw[List.getElem_append_left hj₂_lt_len, decide_eq_false_iff_not, List.mem_iff_getElem,
+        not_exists_mem]
+      intro i hi_lt_len
+      exact Nat.ne_of_lt (SYT_getElem_le hSYT i j₂ hj₂_lt_len hi_lt_len)
+
+theorem SYT_add_left_inverse (hSYT : IsSYT cells) (j : Nat) (hj_le_len : j ≤ cells.length) (h_col) :
+  SYT_remove_cells (SYT_add_cells cells j) (SYT_add hSYT j h_col) (SYT_add_cells_not_nil) = cells
+  := by
+  rw[SYT_remove_cells]
+  have := SYT_size_location_add_cells hSYT j hj_le_len h_col
+  simp_rw[this]
+  simp_rw[SYT_add_cells]
+  split
+  · case _ hj_lt_len =>
+    have hlenj_pos := List.length_pos_iff.mpr (SSYT_row_not_nil (SYT_SSYT hSYT) j hj_lt_len)
+    simp [hlenj_pos]
+  · case _ hj =>
+    have hj_eq_len : j = cells.length := by omega
+    simp[hj_eq_len]
+
+
 
 
 
 example (l : List Nat) (h : l.length = 1) : [l[0]] = l := by exact?
 example (a b : Nat) (h : a < b) : a ≤ b := by exact Nat.le_of_succ_le h
 example : 1 - 1 = 0 := by exact Nat.add_one_sub_one 0
+example (a : Nat) : a + 1 - 1 = a := by exact Nat.add_sub_self_right a 1
+example (a : Nat) (h : a > 0 ): a + 1 > 1 := by exact Nat.lt_add_of_pos_left h
