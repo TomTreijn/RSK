@@ -1651,6 +1651,7 @@ def RSK_step (var : RSK_step_in) : RSK_step_out :=
       simp only [j_lt_len_Q, ↓reduceIte] at shapeP₂
       rw[shapeP₂]
       apply List.ext_getElem
+      -- This is a lot of lines for something so trivial
       · rw[List.length_modify, shape_length_eq_length, shape_length_eq_length, List.length_set]
         exact length_eq_of_shape_eq hShape
       · intro i hi₁ hi₂

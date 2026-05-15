@@ -61,6 +61,9 @@ theorem wkdec_tail_wkdec (h : IsWeakDec (a :: tail)) : IsWeakDec (tail) := monot
 def IsMonotone2 {α : Type} (r : α → α → Prop) (list : List α) : Prop :=
   ∀i j : Nat, (i_lt_j : i < j) → (j_le_l : j < list.length) → r (list[i]'(Nat.lt_trans i_lt_j j_le_l)) (list[j]'j_le_l)
 
+def IsMonotone3 {α : Type} (r : α → α → Prop) (list : List α) : Prop :=
+  list.Pairwise r
+
 def IsWeakInc2 (list : List Nat) : Prop := IsMonotone2 (· ≤ ·) list
 def IsStrictInc2 (list : List Nat) : Prop := IsMonotone2 (· < ·) list
 def IsWeakDec2 (list : List Nat) : Prop := IsMonotone2 (· ≥ ·) list
@@ -126,6 +129,12 @@ theorem monotone_monotone2 r (trans : ∀{a b c : α}, r a b → r b c → r a c
       have a_le_b := h_ord 0 1 Nat.one_pos (Nat.one_lt_succ_succ tail.length)
       rw[IsMonotone]
       exact ⟨a_le_b, hi⟩
+
+theorem monotone2_monotone3 (r : α → α → Prop) {list}
+   : IsMonotone2 r list ↔ IsMonotone3 r list := by
+   rw[IsMonotone2, IsMonotone3]
+   rw[List.pairwise_iff_getElem]
+   grind
 
 theorem wkinc_wkinc2 {list : List Nat} : IsWeakInc list ↔ IsWeakInc2 list :=
   monotone_monotone2 (· ≤ ·) Nat.le_trans
