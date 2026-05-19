@@ -1,54 +1,45 @@
+import RSK.OptionOrd
 
 set_option relaxedAutoImplicit true
 
-def option_r {α : Type} (r : α → α → Prop) (a b : Option α) :=
-  match a, b with
-  | some a, some b => r a b
-  | _, _ => True
+/--
+  In this file a monotone list is defined and some functions and theorems for using monotone lists are defined.
 
-def op_lt (a b : Option Nat) := option_r (· < ·) a b
-def op_le (a b : Option Nat) := option_r (· ≤ ·) a b
-def op_ge (a b : Option Nat) := option_r (· ≥ ·) a b
+  Specific instances of weak increasing, strict increasing and weak decreasing lists are defined on ℕ
 
-@[simp]
-theorem option_r_some : option_r r (some a) (some b) = (r a b) := by rfl
-@[simp]
-theorem op_le_some : op_le (some a) (some b) = (a ≤ b) := by rfl
-@[simp]
-theorem op_lt_some : op_lt (some a) (some b) = (a < b) := by rfl
-@[simp]
-theorem op_ge_some : op_ge (some a) (some b) = (a ≥ b) := by rfl
+  Note that List.Pairwise does very much the same.
+-/
 
-@[simp]
-theorem option_r_left_none r : option_r r (none) (b) := by simp only [option_r.eq_def]
-@[simp]
-theorem op_le_none_l : op_le none a := option_r_left_none (· ≤ ·)
-@[simp]
-theorem op_lt_none_l : op_lt none a := option_r_left_none (· < ·)
-@[simp]
-theorem op_ge_none_l : op_ge none a := option_r_left_none (· ≥ ·)
-
-@[simp]
-theorem option_r_right_none r : option_r r (a) (none) := by simp only [option_r.eq_def]
-@[simp]
-theorem op_le_none_r : op_le a none := option_r_right_none (· ≤ ·)
-@[simp]
-theorem op_lt_none_r : op_lt a none := option_r_right_none (· < ·)
-@[simp]
-theorem op_ge_none_r : op_ge a none := option_r_right_none (· ≥ ·)
-
-/-- A monotone list is a list where each subsequent pair of entries obeys the relation r -/
-def IsMonotone {α : Type} (r : α → α → Prop) (list : List α) : Prop :=
+def IsMonotone {α : Type} (r : α → α → Prop) [DecidableRel r] (list : List α) : Prop :=
   match list with
   | [] => True
   | [_] => True
   | a :: b :: tail => r a b ∧ IsMonotone r (b :: tail)
 
+instance instDecidableIsMonotone
+    {α : Type} (r : α → α → Prop) [DecidableRel r] (list : List α) :
+    Decidable (IsMonotone r list) :=
+    match list with
+    | [] => instDecidableTrue
+    | [_] => instDecidableTrue
+    | _ :: b :: tail =>
+      have := instDecidableIsMonotone r (b :: tail)
+      instDecidableAnd
+
 def IsWeakInc (list : List Nat) : Prop := IsMonotone (· ≤ ·) list
 def IsStrictInc (list : List Nat) : Prop := IsMonotone (· < ·) list
 def IsWeakDec (list : List Nat) : Prop := IsMonotone (· ≥ ·) list
 
-theorem monotone_tail_monotone (h : IsMonotone r (a :: tail)) : IsMonotone r tail := by
+instance instDecidableIsWeakInc (list : List Nat) : Decidable (IsWeakInc list) :=
+  instDecidableIsMonotone (· ≤ ·) list
+instance instDecidableIsStrictInc (list : List Nat) : Decidable (IsStrictInc list) :=
+  instDecidableIsMonotone (· < ·) list
+instance instDecidableIsWeakDec (list : List Nat) : Decidable (IsWeakDec list) :=
+  instDecidableIsMonotone (· ≥ ·) list
+
+
+/-- If a :: tail is monotone, then so is tail -/
+theorem monotone_tail_monotone [DecidableRel r] (h : IsMonotone r (a :: tail)) : IsMonotone r tail := by
   cases tail with
   | nil => exact h
   | cons b tail2 =>
@@ -58,11 +49,9 @@ theorem wkinc_tail_wkinc (h : IsWeakInc (a :: tail)) : IsWeakInc (tail) := monot
 theorem stinc_tail_stinc (h : IsStrictInc (a :: tail)) : IsStrictInc (tail) := monotone_tail_monotone h
 theorem wkdec_tail_wkdec (h : IsWeakDec (a :: tail)) : IsWeakDec (tail) := monotone_tail_monotone h
 
+/-- A second definition of a monotone function. Where each pair (list[i], list[j]) obeys the relation r for any i < j -/
 def IsMonotone2 {α : Type} (r : α → α → Prop) (list : List α) : Prop :=
   ∀i j : Nat, (i_lt_j : i < j) → (j_le_l : j < list.length) → r (list[i]'(Nat.lt_trans i_lt_j j_le_l)) (list[j]'j_le_l)
-
-def IsMonotone3 {α : Type} (r : α → α → Prop) (list : List α) : Prop :=
-  list.Pairwise r
 
 def IsWeakInc2 (list : List Nat) : Prop := IsMonotone2 (· ≤ ·) list
 def IsStrictInc2 (list : List Nat) : Prop := IsMonotone2 (· < ·) list
@@ -78,7 +67,8 @@ theorem monotone2_tail_monotone2 (h_ord : IsMonotone2 r (a :: tail)) : IsMonoton
   rw[←h₁, ←h₂]
   exact hi
 
-theorem monotone_monotone2 r (trans : ∀{a b c : α}, r a b → r b c → r a c) {list}
+/-- If the relation on a monotone list are transitive, then the two definitions are equal. -/
+theorem monotone_monotone2 r [DecidableRel r] (trans : ∀{a b c : α}, r a b → r b c → r a c) {list}
    : IsMonotone r list ↔ IsMonotone2 r list := by
   constructor
   · intro h_ord i j i_lt_j j_le_l
@@ -130,12 +120,6 @@ theorem monotone_monotone2 r (trans : ∀{a b c : α}, r a b → r b c → r a c
       rw[IsMonotone]
       exact ⟨a_le_b, hi⟩
 
-theorem monotone2_monotone3 (r : α → α → Prop) {list}
-   : IsMonotone2 r list ↔ IsMonotone3 r list := by
-   rw[IsMonotone2, IsMonotone3]
-   rw[List.pairwise_iff_getElem]
-   grind
-
 theorem wkinc_wkinc2 {list : List Nat} : IsWeakInc list ↔ IsWeakInc2 list :=
   monotone_monotone2 (· ≤ ·) Nat.le_trans
 theorem stinc_stinc2 {list : List Nat} : IsStrictInc list ↔ IsStrictInc2 list :=
@@ -143,7 +127,8 @@ theorem stinc_stinc2 {list : List Nat} : IsStrictInc list ↔ IsStrictInc2 list 
 theorem wkdec_wkdec2 {list : List Nat} : IsWeakDec list ↔ IsWeakDec2 list :=
   monotone_monotone2 (· ≥ ·) (fun a b ↦ Nat.le_trans b a)
 
-theorem montone_front_monotone r (h : IsMonotone r list) : IsMonotone r list.dropLast := by
+/-- If list ++ [a] is montone, then so is list. -/
+theorem montone_front_monotone r [DecidableRel r] (h : IsMonotone r list) : IsMonotone r list.dropLast := by
   match list with
   | [] => simp[IsMonotone]
   | a :: [] => simp[IsMonotone]
@@ -155,7 +140,8 @@ theorem montone_front_monotone r (h : IsMonotone r list) : IsMonotone r list.dro
 theorem wkinc_front_wkinc (h : IsWeakInc list) : IsWeakInc list.dropLast := montone_front_monotone (· ≤ ·) h
 theorem wkdec_front_wkdec (h : IsWeakDec list) : IsWeakDec list.dropLast := montone_front_monotone (· ≥ ·) h
 
-theorem monotone_append_monotone {α : Type} {list : List α} {r : α → α → Prop} (h_ord : IsMonotone r list) (n : α) (h_r : option_r r list.getLast? n) :
+/-- For any monotone list l and n ∈ α, if the last element of l and n obey r, then l ++ [n] is monotone -/
+theorem monotone_append_monotone {α : Type} {list : List α} {r : α → α → Prop} [DecidableRel r] (h_ord : IsMonotone r list) (n : α) (h_r : option_r r list.getLast? n) :
   IsMonotone r (list ++ [n]) := by
   match h_list : list with
   | [] => simp only [List.nil_append, IsMonotone]
@@ -174,8 +160,9 @@ theorem monotone_append_monotone {α : Type} {list : List α} {r : α → α →
 theorem wkinc_append_wkinc (h_ord : IsWeakInc list) (n : Nat) (h_le : op_le list.getLast? n) :
   IsWeakInc (list ++ [n]) := monotone_append_monotone h_ord n h_le
 
-theorem monotone_set_monotone {α : Type} {list : List α} (r : α → α → Prop) (h_ord : IsMonotone r list) (k : α) (i : Nat)
-  (h_r : ((i=0) ∨ (option_r r list[i-1]? k)) ∧ (option_r r k list[i+1]?)) :
+/-- We can set k ∈ α at i ∈ ℕ into a monotone list if k obeys the relation r with its new neighbours. -/
+theorem monotone_set_monotone {α : Type} {list : List α} (r : α → α → Prop) [DecidableRel r] (h_ord : IsMonotone r list) (k : α) (i : Nat)
+  (h_r : (i = 0 ∨ option_r r list[i-1]? k) ∧ option_r r k list[i+1]?) :
   IsMonotone r (list.set i k) := by
   match list with
   | [] => trivial

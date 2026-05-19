@@ -5,9 +5,29 @@ set_option relaxedAutoImplicit true
 
 abbrev Grid := List (List Nat)
 
-
 def row_comp (row₁ row₂ : List Nat) : Prop :=
   ∃(h_diagram : row₂.length ≤ row₁.length), ∀(i : Nat) (hi : i < row₂.length), row₁[i] < row₂[i]
+
+theorem row_comp₂ (row₁ row₂ : List Nat) :
+  row_comp row₁ row₂ ↔
+  if h_diagram : row₂.length ≤ row₁.length then
+    ∀(i : Nat) (hi : i < row₂.length), row₁[i] < row₂[i]
+  else
+    False := by
+  rw[row_comp]
+  constructor
+  · intro ⟨h_diagram, fall⟩
+    simp [h_diagram, fall]
+  · split
+    · case _ h_diagram =>
+      intro fall
+      exact ⟨h_diagram, fall⟩
+    · case _ =>
+      intro f
+      exact False.elim f
+
+instance instDecidable_row_comp (row₁ row₂ : List Nat) : Decidable (row_comp row₁ row₂) :=
+  decidable_of_decidable_of_iff (Iff.symm (row_comp₂ row₁ row₂))
 
 theorem row_comp_trans (h₁ : row_comp row₁ row₂) (h₂ : row_comp row₂ row₃) :
   row_comp row₁ row₃ := by
@@ -25,6 +45,9 @@ theorem op_lst_none_l : op_lst none a := option_r_left_none row_comp
 theorem op_lst_none_r : op_lst a none := option_r_right_none row_comp
 
 def IsRowInc (cells : Grid) := IsMonotone row_comp cells
+instance instDecidableIsRowInc (cells : Grid) : Decidable (IsRowInc cells) :=
+  instDecidableIsMonotone row_comp cells
+
 def IsRowInc2 (cells : Grid) := IsMonotone2 row_comp cells
 
 def rowinc_rowinc2 {cells : Grid} : IsRowInc cells ↔ IsRowInc2 cells
@@ -47,6 +70,11 @@ theorem rowinc_tail_rowinc (h : IsRowInc (top :: rest)) : IsRowInc rest :=
 def IsSSYT (cells : Grid) : Prop :=
   (∀ (j : Nat) (h : j < cells.length), IsWeakInc cells[j] ∧ cells[j] ≠ []) ∧
   IsRowInc cells
+
+instance instDecidableIsSSYT (cells : Grid) : Decidable (IsSSYT cells) := instDecidableAnd
+
+example : IsSSYT [[1, 2, 2, 3], [2, 3, 4], [5]] := by decide
+
 
 theorem SSYT_rows_inc (hSSYT : IsSSYT cells) : IsRowInc cells := hSSYT.right
 theorem SSYT_row_weak (hSSYT : IsSSYT cells) (j : Nat) (h : j < cells.length) :

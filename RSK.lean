@@ -1,13 +1,14 @@
 import Mathlib.Logic.Function.Basic
 import Mathlib.Data.SetLike.Basic
-import RSK.Basic
 import Mathlib.Tactic
+import RSK.OptionOrd
 import RSK.OrderedList
 import RSK.SSYT
 import RSK.SYT
 
 set_option relaxedAutoImplicit true
 
+/-- p is false for all items before findIdx p -/
 theorem lt_findIdx_false (l : List α) (p : α → Bool) : ∀(i : Nat) (hi_lt_find : i < l.findIdx p),
   have hi_lt_len := Nat.lt_of_lt_of_le hi_lt_find List.findIdx_le_length
   ¬ p l[i] := by
@@ -143,6 +144,19 @@ def bmpshft_row (var : bmpshft_row_in) : bmpshft_row_out :=
             by exact Nat.lt_of_sub_eq_succ hj
           exact Nat.ne_zero_of_lt h
     ⟨row', h_wkinc', k', h_notnil', h_leq'⟩
+
+example (a b : Nat) : (some a = some b) ↔ a = b := by exact Option.some_inj
+
+theorem bmped_out_in_orig {var : bmpshft_row_in} :
+  ∀ (_ : (bmpshft_row var).k' = some k₂'), k₂' ∈ var.row := by
+  intro his_some
+  rw[bmpshft_row] at his_some
+  split at his_some
+  · contradiction
+  · simp only at his_some
+    rw[Option.some_inj] at his_some
+    exact List.mem_of_getElem his_some
+
 
 #eval! bmpshft_row ⟨[1, 2, 4, 5], (by simp[IsWeakInc, IsMonotone]), 3⟩
 #eval! bmpshft_row ⟨[1, 2, 4, 5], (by simp[IsWeakInc, IsMonotone]), 6⟩
@@ -618,6 +632,16 @@ def bmpshft_row_full (var : bmpshft_row_full_in) : bmpshft_row_full_out :=
       by
         simp[hj_lt_len]
     ⟩
+
+theorem bmped_out_full_in_orig {var : bmpshft_row_full_in} :
+  ∀ (_ : (bmpshft_row_full var).k' = some k₂'), k₂' ∈ entries var.cells := by
+  intro his_some
+  rw[bmpshft_row_full] at his_some
+  split at his_some
+  · case _ hj_lt_len =>
+    have := bmped_out_in_orig his_some
+    exact mem_entries_of_mem_row hj_lt_len this
+  · contradiction
 
 theorem bmpshft_row_full_j (var : bmpshft_row_full_in) :
   (bmpshft_row_full var).j = var.j := by
@@ -1419,17 +1443,6 @@ example (a : Nat) : a + 1 - 1 = a := by exact Nat.add_sub_self_right a 1
 example (a : Nat) (l : List Nat) (h : a < l.length) : l.set a l[a] = l :=
   List.set_getElem_self h
 
-
-  -- · case _ his_some =>
-  --   simp only [dite_eq_ite]
-  --   have ih := shape_bmpshft_ind (bmpshft_row_in_next var his_some)
-  --   simp only [dite_eq_ite] at ih
-  --   rw[←shape_length_eq_length, shape_bmpshft_row_in_next, shape_length_eq_length] at ih
-  --   exact ih
-  -- termination_by var.cells.length - var.j
-  -- decreasing_by
-  -- exact length_sub_j_decreasing _ _
-
 structure bmpshft_in where
   cells : Grid
   hSSYT : IsSSYT cells
@@ -1580,13 +1593,13 @@ theorem length_bmpshft_lt_succ (var : bmpshft_in) :
       rw[List.length_append, List.length_singleton, shape_length_eq_length]
 
 
--- #eval bmpshft ⟨[[1, 2, 2, 3], [2, 3, 4], [5]], by grind[IsSSYT, IsWeakInc, IsRowInc, IsMonotone, row_comp], 2⟩
--- #eval! bmpshft_inv (bmpshft ⟨[[1, 2, 2, 3], [2, 3, 4], [5]], by grind[IsSSYT, IsWeakInc, IsRowInc, IsMonotone, row_comp], 2⟩)
+#eval bmpshft ⟨[[1, 2, 2, 3], [2, 3, 4], [5]], by decide, 2⟩
+#eval bmpshft_inv (bmpshft ⟨[[1, 2, 2, 3], [2, 3, 4], [5]], by decide, 2⟩)
 
--- #eval bmpshft ⟨[[1, 2, 2, 4], [2, 3, 4], [5]], by grind[IsSSYT, IsWeakInc, IsRowInc, IsMonotone, row_comp], 2⟩
--- #eval! bmpshft_inv (bmpshft ⟨[[1, 2, 2, 3], [2, 3, 4], [5]], by grind[IsSSYT, IsWeakInc, IsRowInc, IsMonotone, row_comp], 2⟩)
+#eval bmpshft ⟨[[1, 2, 2, 4], [2, 3, 4], [5]], by decide, 2⟩
+#eval! bmpshft_inv (bmpshft ⟨[[1, 2, 2, 3], [2, 3, 4], [5]], by decide, 2⟩)
 
-structure PQ_pair where
+structure SSYT_SYT_pair where
   P : Grid
   Q : Grid
   hSSYT : IsSSYT P
@@ -1595,10 +1608,10 @@ structure PQ_pair where
 
 structure RSK_step_in where
   k : Nat
-  pair : PQ_pair
+  pair : SSYT_SYT_pair
 
 structure RSK_step_out where
-  pair : PQ_pair
+  pair : SSYT_SYT_pair
   hnot_nil : pair.P ≠ []
 
 example (a : Nat) (h : a > 0) : (a > a - 1) := by exact Nat.sub_one_lt_of_lt h
@@ -1839,3 +1852,220 @@ theorem RSK_step_left_inverse (var : RSK_step_in) :
   simp_rw[this, hstep_eq, bmpshft_left_inverse]
   congr
   exact SYT_add_left_inverse hSYT j hj_le_lenQ h_col
+
+theorem bmpshft_row_count {var : bmpshft_row_in} {a : Nat} :
+  (bmpshft_row var).row.count a = match (bmpshft_row var).k' with
+  | none =>
+    (var.row ++ [var.k]).count a
+  | some k' =>
+    (var.row ++ [var.k]).count a - [k'].count a := by
+  let var_out := bmpshft_row var
+  have hvar_out_eq : var_out = bmpshft_row var := by rfl
+  rw[←hvar_out_eq]
+  simp_rw[bmpshft_row] at hvar_out_eq
+  split at hvar_out_eq
+  · case _ =>
+    simp_rw[hvar_out_eq]
+  · case _ hj_eq_some _ =>
+    have hj_lt_len := (List.findIdx?_eq_some_iff_findIdx_eq.mp hj_eq_some).left
+    simp_rw[hvar_out_eq]
+    rw [List.count_singleton, List.count_set hj_lt_len]
+    split
+    · case _ ha_eq_rowj =>
+      have hcounta_ne_zero : var.row.count a ≠ 0 := by
+        rw[←Nat.pos_iff_ne_zero, List.count_pos_iff]
+        rw [beq_iff_eq] at ha_eq_rowj
+        refine List.mem_of_getElem ha_eq_rowj
+      rw[List.count_append, List.count_singleton]
+      split
+      · case _ =>
+        rw[Nat.sub_one_add_one hcounta_ne_zero, Nat.add_one_sub_one]
+      · case _ =>
+        repeat rw[Nat.add_zero]
+    · case _ =>
+      rw[List.count_append, List.count_singleton]
+      repeat rw[Nat.sub_zero]
+
+theorem something {a b c : Nat} : c + (a + b) - a = c + b := by omega
+theorem something₂ {a b c : Nat} (h : a > 0) : c + (a + b - 1) - a = c + b - 1 := by omega
+theorem something₃ {a b c : Nat} : c + (a + b - 0) - a = c + b - 0 := by omega
+
+theorem bmpshft_row_full_count {var : bmpshft_row_full_in} {a : Nat} :
+  (entries (bmpshft_row_full var).cells).count a =
+  (match (bmpshft_row_full var).k' with
+  | none =>
+    (entries var.cells ++ [var.k]).count a
+  | some k' =>
+    (entries var.cells ++ [var.k]).count a - [k'].count a) := by
+  let var_out := bmpshft_row_full var
+  have hvar_out_eq : var_out = bmpshft_row_full var := by rfl
+  rw[←hvar_out_eq]
+  rw[bmpshft_row_full] at hvar_out_eq
+  split at hvar_out_eq
+  case _ hj_lt_len =>
+    simp_rw[hvar_out_eq]
+    rw[count_entries_set (hj_lt_len:=hj_lt_len), bmpshft_row_count]
+    simp only
+    repeat rw[List.count_append]
+    split
+    · case _ =>
+      -- AGAIN, WHAT?
+      exact something
+    · case _ k' his_some =>
+      nth_rewrite 2 3 [List.count_singleton]
+      split
+      · case _ hk'_eq_a =>
+        rw [beq_iff_eq] at hk'_eq_a
+        have row_count_a_pos : 0 < var.cells[var.j].count a := by
+          have k'_in_row := bmped_out_in_orig his_some
+          rw[←hk'_eq_a]
+          exact List.count_pos_iff.mpr k'_in_row
+        exact something₂ row_count_a_pos
+      · case _ =>
+        rw[something₃]
+  · case _ =>
+    simp_rw[hvar_out_eq]
+    rw[entries_append]
+
+example (a b : Nat) : a + b - 0 = a + b := by exact?
+theorem something₄ {a b : Nat} (h : 0 < a) : a + b - 1 + 1 = a + b := by omega
+
+theorem bmpshft_ind_count {a : Nat} :
+  (entries (bmpshft_ind var).var_out.cells).count a = (entries var.cells ++ [var.k]).count a := by
+  rw[bmpshft_ind]
+  split
+  · case _ h_eq_none =>
+    rw[bmpshft_row_full_count, h_eq_none]
+  · case _ k' h_eq_some =>
+    rw[bmpshft_ind_count]
+    simp_rw[bmpshft_row_in_next, List.count_append, bmpshft_row_full_count, h_eq_some]
+    rw[List.count_append]
+    nth_rewrite 2 3 [List.count_singleton]
+    split
+    · case _ hk'_eq_a =>
+      rw [beq_iff_eq] at hk'_eq_a
+      have ha_in_entries : 0 < (entries var.cells).count a := by
+        rw[List.count_pos_iff]
+        rw[←hk'_eq_a]
+        exact bmped_out_full_in_orig h_eq_some
+      exact something₄ ha_in_entries
+    · case _ =>
+      rw[add_zero]
+      exact Nat.sub_zero ?_
+  termination_by var.cells.length - var.j
+  decreasing_by
+  exact length_sub_j_decreasing var ?_
+
+theorem RSK_step_count {a : Nat} :
+  (entries (RSK_step var).pair.P).count a = (entries var.pair.P ++ [var.k]).count a := by
+  rw[RSK_step]
+  exact bmpshft_ind_count
+
+theorem RSK_step_entries :
+  (entries (RSK_step var).pair.P).Perm (entries var.pair.P ++ [var.k]) := by
+  rw[List.perm_iff_count]
+  intro a
+  exact RSK_step_count
+
+theorem RSK_step_size :
+  size (RSK_step var).pair.P = size var.pair.P + 1 := by
+  repeat rw[←size_eq_entries_len]
+  rw[List.Perm.length_eq RSK_step_entries, List.length_append, List.length_singleton]
+
+theorem RSK_step_inv_size :
+  size (RSK_step_inv var).pair.P = size var.pair.P - 1 := by
+  rw[←(RSK_step_right_inverse var), RSK_step_size, RSK_step_right_inverse]
+  exact Nat.eq_sub_of_add_eq rfl
+
+def RSK (l : List Nat) : SSYT_SYT_pair :=
+  match l with
+  | [] => ⟨[], [], by sorry, by sorry, by decide⟩
+  | a :: as =>
+    (RSK_step ⟨a, RSK as⟩).pair
+
+example (a : Nat) (h : a > 0) : a - 1 < a := by exact Nat.sub_one_lt_of_lt h
+
+def RSK_inv (pair : SSYT_SYT_pair) : List Nat :=
+  if hnot_nil : pair.P ≠ [] then
+    (RSK_step_inv ⟨pair, hnot_nil⟩).k :: RSK_inv (RSK_step_inv ⟨pair, hnot_nil⟩).pair
+  else
+    []
+  termination_by size pair.P
+  decreasing_by
+  rw[RSK_step_inv_size]
+  exact Nat.sub_one_lt_of_lt (size_pos_of_not_nill pair.hSSYT hnot_nil)
+
+theorem RSK_right_inverse (pair : SSYT_SYT_pair) :
+  RSK (RSK_inv pair) = pair := by
+  rw[RSK_inv]
+  split
+  · case _ hnot_nil =>
+    rw[RSK, RSK_right_inverse, RSK_step_right_inverse]
+  · case _ hpair_nil =>
+    rw [ne_eq, Decidable.not_not] at hpair_nil
+    rw[RSK]
+    congr
+    · exact Eq.symm hpair_nil
+    · have := List.length_eq_zero_iff.mpr hpair_nil
+      apply Eq.symm
+      rw[←List.length_eq_zero_iff, ←length_eq_of_shape_eq pair.hShape]
+      exact List.eq_nil_iff_length_eq_zero.mp hpair_nil
+  termination_by size pair.P
+  decreasing_by
+  simp_rw[RSK_step_inv_size]
+  exact Nat.sub_one_lt_of_lt (size_pos_of_not_nill pair.hSSYT (by
+    -- Ugly, but I don't know how to get hnot_nil
+    expose_names
+    exact h_1))
+
+theorem RSK_left_inverse (l : List Nat) :
+  RSK_inv (RSK l) = l := by
+  rw[RSK.eq_def]
+  split
+  · case _ =>
+    rw[RSK_inv]
+    simp
+  · case _ a as =>
+    rw[RSK_inv]
+    simp only [ne_eq, (RSK_step ⟨a, RSK as⟩).hnot_nil, not_false_eq_true, ↓reduceDIte]
+    rw[RSK_step_left_inverse, RSK_left_inverse]
+
+theorem RSK_count {a : Nat} :
+  (entries (RSK l).P).count a = l.count a := by
+  rw[RSK.eq_def]
+  split
+  · case _ =>
+    rw[entries_nil]
+  · case _ =>
+    rw[RSK_step_count, List.count_cons, List.count_append, List.count_singleton, RSK_count]
+
+theorem RSK_entries :
+  (entries (RSK l).P).Perm l := by
+  rw[List.perm_iff_count]
+  intro a
+  exact RSK_count
+
+theorem RSK_size :
+  size (RSK l).P = l.length := by
+  rw[RSK.eq_def]
+  split
+  · case _ =>
+    exact Eq.symm (Nat.eq_of_beq_eq_true rfl)
+  · case _ =>
+    rw[List.length_cons, RSK_step_size, RSK_size]
+
+structure SYT_SYT_pair where
+  P : Grid
+  Q : Grid
+  hSYTP : IsSYT P
+  hSYTQ : IsSYT Q
+  hShape : shape P = shape Q
+
+def isSYTPair (pair : SSYT_SYT_pair) : Prop := IsSYT pair.P
+
+theorem Perm_RSK_SYT (l : List Nat) (hPerm : l.Perm (List.range l.length)) :
+  isSYTPair (RSK l) := by
+  constructor
+  · rw[RSK_size]
+    exact List.Perm.trans RSK_entries hPerm
+  · exact (RSK l).hSSYT
