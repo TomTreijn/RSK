@@ -220,6 +220,7 @@ example {a b : Nat} (h : a ≤ b) : (b ≥ a) := by exact String.Pos.Raw.mk_le_m
 #eval! bmpshft_row_inv ⟨[1, 2, 4, 5],
   (by simp[IsWeakInc, IsMonotone]), some 5, (by simp), (by rw[op_lt_some]; decide)⟩
 
+@[simp]
 theorem bmpshft_row_left_inverse : Function.LeftInverse bmpshft_row_inv bmpshft_row := by
   apply Function.leftInverse_iff_comp.mpr
   apply funext
@@ -303,6 +304,7 @@ theorem bmpshft_row_left_inverse : Function.LeftInverse bmpshft_row_inv bmpshft_
             repeat rw [List.getElem_set_ne (h_j_neq_i)]
       simp_rw[rows_eq]
 
+@[simp]
 theorem bmpshft_row_right_inverse : Function.RightInverse bmpshft_row_inv bmpshft_row := by
   apply Function.rightInverse_iff_comp.mpr
   refine Eq.symm (funext ?_)
@@ -886,6 +888,7 @@ theorem switch_bmpshft_row_inv_var_in :
     (bmpshft_row_inv var_out).k⟩ : bmpshft_row_in) = bmpshft_row_inv var_out := by
   rfl
 
+@[simp]
 theorem bmpshft_row_full_left_inverse :
   ∀ (var : bmpshft_row_full_in), bmpshft_row_inv_full (bmpshft_row_full var) = var := by
   intro ⟨cells, hSSYT, k, j, _, _⟩
@@ -911,6 +914,7 @@ theorem bmpshft_row_full_left_inverse :
     simp_rw[getLast]
     simp[bmpshft_row_inv]
 
+@[simp]
 theorem bmpshft_row_full_right_inverse :
   ∀ (var : bmpshft_row_full_out), bmpshft_row_full (bmpshft_row_inv_full var) = var := by
   intro ⟨cells, hSSYT, k', j, hj_lt_len, hcol⟩
@@ -1186,6 +1190,7 @@ theorem switch_bmpshft_row_full :
   hj_lt_len,
   h_col⟩ = bmpshft_row_full var := by rfl
 
+@[simp]
 theorem bmpshft_ind_left_inverse (var : bmpshft_row_full_in) :
   bmpshft_ind_inv (bmpshft_ind var) = var := by
   rw[bmpshft_ind]
@@ -1245,6 +1250,7 @@ theorem switch_bmpshft_row_inv_full :
     hj_le_len,
     h_col⟩ = (bmpshft_ind_inv var : bmpshft_row_full_in) := by rfl
 
+@[simp]
 theorem bmpshft_ind_right_inverse (var : bmpshft_ind_out) :
   bmpshft_ind (bmpshft_ind_inv var) = var := by
   rw[bmpshft_ind_inv]
@@ -1498,6 +1504,7 @@ def bmpshft_inv (var : bmpshft_out) : bmpshft_in :=
 
 example (a : Nat) : (a ≥ 0) := by exact Nat.zero_le a
 
+@[simp]
 theorem bmpshft_left_inverse (var : bmpshft_in) : bmpshft_inv (bmpshft var) = var := by
   rw[bmpshft, bmpshft_inv]
   simp only [bmpshft_out_to_bmpshft_ind_out]
@@ -1530,6 +1537,7 @@ theorem bmpshft_left_inverse (var : bmpshft_in) : bmpshft_inv (bmpshft var) = va
   · rw[left_inverse]
     dsimp[var_in, bmpshft_in_to_bmpshft_row_full_in]
 
+@[simp]
 theorem bmpshft_right_inverse (var : bmpshft_out) : bmpshft (bmpshft_inv var) = var := by
   rw[bmpshft, bmpshft_inv]
   simp only [bmpshft_in_to_bmpshft_row_full_in]
@@ -1794,6 +1802,7 @@ theorem switch_bmpshft_out2 (h : j = (bmpshft var_out).j) :
     hend_col⟩ : bmpshft_out) = bmpshft var_out := by
   simp_rw[h]
 
+@[simp]
 theorem RSK_step_right_inverse (out : RSK_step_out) :
   RSK_step (RSK_step_inv out) = out := by
   rw[RSK_step_inv, RSK_step]
@@ -1803,6 +1812,7 @@ theorem RSK_step_right_inverse (out : RSK_step_out) :
   exact
     SYT_add_right_inverse out.pair.hSYT hQnot_nil
 
+@[simp]
 theorem RSK_step_left_inverse (var : RSK_step_in) :
   RSK_step_inv (RSK_step var) = var := by
   -- MASSIVE CODE DUBLICATION FROM HERE
@@ -1979,7 +1989,7 @@ theorem RSK_step_inv_size :
 
 def RSK (l : List Nat) : SSYT_SYT_pair :=
   match l with
-  | [] => ⟨[], [], by sorry, by sorry, by decide⟩
+  | [] => ⟨[], [], by decide, by decide, by decide⟩
   | a :: as =>
     (RSK_step ⟨a, RSK as⟩).pair
 
@@ -1995,6 +2005,7 @@ def RSK_inv (pair : SSYT_SYT_pair) : List Nat :=
   rw[RSK_step_inv_size]
   exact Nat.sub_one_lt_of_lt (size_pos_of_not_nill pair.hSSYT hnot_nil)
 
+@[simp]
 theorem RSK_right_inverse (pair : SSYT_SYT_pair) :
   RSK (RSK_inv pair) = pair := by
   rw[RSK_inv]
@@ -2018,6 +2029,7 @@ theorem RSK_right_inverse (pair : SSYT_SYT_pair) :
     expose_names
     exact h_1))
 
+@[simp]
 theorem RSK_left_inverse (l : List Nat) :
   RSK_inv (RSK l) = l := by
   rw[RSK.eq_def]
@@ -2039,11 +2051,23 @@ theorem RSK_count {a : Nat} :
   · case _ =>
     rw[RSK_step_count, List.count_cons, List.count_append, List.count_singleton, RSK_count]
 
-theorem RSK_entries :
+theorem RSK_inv_count {a : Nat} :
+  List.count a (RSK_inv pair) = List.count a (entries pair.P) := by
+  have := RSK_count (l := (RSK_inv pair)) (a := a)
+  rw[RSK_right_inverse] at this
+  exact Eq.symm this
+
+theorem RSK_entries (l : List Nat) :
   (entries (RSK l).P).Perm l := by
   rw[List.perm_iff_count]
   intro a
   exact RSK_count
+
+theorem RSK_inv_entries (pair : SSYT_SYT_pair) :
+  (RSK_inv pair).Perm (entries pair.P) := by
+  have := RSK_entries (RSK_inv pair)
+  rw[RSK_right_inverse] at this
+  exact List.Perm.symm this
 
 theorem RSK_size :
   size (RSK l).P = l.length := by
@@ -2054,18 +2078,92 @@ theorem RSK_size :
   · case _ =>
     rw[List.length_cons, RSK_step_size, RSK_size]
 
-structure SYT_SYT_pair where
-  P : Grid
-  Q : Grid
-  hSYTP : IsSYT P
-  hSYTQ : IsSYT Q
-  hShape : shape P = shape Q
-
-def isSYTPair (pair : SSYT_SYT_pair) : Prop := IsSYT pair.P
+theorem RSK_inv_size :
+  size pair.P = (RSK_inv pair).length := by
+  have := RSK_size (l := (RSK_inv pair))
+  rw[RSK_right_inverse] at this
+  exact this
 
 theorem Perm_RSK_SYT (l : List Nat) (hPerm : l.Perm (List.range l.length)) :
-  isSYTPair (RSK l) := by
+  IsSYT (RSK l).P := by
   constructor
   · rw[RSK_size]
-    exact List.Perm.trans RSK_entries hPerm
+    exact List.Perm.trans (RSK_entries l) hPerm
   · exact (RSK l).hSSYT
+
+theorem SYT_RSK_inv_Perm (pair : SSYT_SYT_pair) (hSYT_P : IsSYT pair.P) :
+  (RSK_inv pair).Perm (List.range (size pair.P)) := by
+  exact List.Perm.trans (RSK_inv_entries pair) (hSYT_P.left)
+
+structure SYT_SYT_pair (n : Nat) where
+  P : Grid
+  Q : Grid
+  hSYT_P : IsSYT P
+  hSYT_Q : IsSYT Q
+  hShape : shape P = shape Q
+  hsize : size P = n
+
+def SSYT_SYT_pair_of_SYT_SYT_pair (pair : SYT_SYT_pair n) : SSYT_SYT_pair :=
+  ⟨pair.P, pair.Q, SYT_SSYT pair.hSYT_P, pair.hSYT_Q, pair.hShape⟩
+
+structure Perm (n : Nat) where
+  l : List Nat
+  h_perm : l.Perm (List.range n)
+
+theorem Perm_len (perm : Perm n) : perm.l.length = n := by
+  have := List.Perm.length_eq perm.h_perm
+  rw[List.length_range] at this
+  exact this
+
+def RSK₂ (perm : Perm n) : SYT_SYT_pair n :=
+  have len := Perm_len perm
+  ⟨
+    (RSK perm.l).P,
+    (RSK perm.l).Q,
+    Perm_RSK_SYT perm.l (by rw[len]; exact perm.h_perm),
+    (RSK perm.l).hSYT,
+    (RSK perm.l).hShape,
+    by
+      have := RSK_size (l:=perm.l)
+      rw[len] at this
+      exact this
+  ⟩
+
+def RSK₂_inv (pair : SYT_SYT_pair n) : Perm n :=
+  ⟨(RSK_inv (SSYT_SYT_pair_of_SYT_SYT_pair pair)), by
+    have := SYT_RSK_inv_Perm (SSYT_SYT_pair_of_SYT_SYT_pair pair) pair.hSYT_P
+    nth_rewrite 2 [SSYT_SYT_pair_of_SYT_SYT_pair] at this
+    rw[pair.hsize] at this
+    exact this
+  ⟩
+
+theorem swap_pair :
+  (⟨(RSK l).P,
+    (RSK l).Q,
+    hSSYT,
+    hSYT,
+    hShape,
+  ⟩ : SSYT_SYT_pair) = RSK l := by rfl
+
+theorem RSK₂_left_inverse :
+  ∀(var : Perm n), RSK₂_inv (RSK₂ var) = var := by
+  intro var
+  simp_rw[RSK₂, RSK₂_inv, SSYT_SYT_pair_of_SYT_SYT_pair, swap_pair, RSK_left_inverse]
+
+theorem RSK₂_right_inverse :
+  ∀(var : SYT_SYT_pair n), RSK₂ (RSK₂_inv var) = var := by
+  intro var
+  simp_rw[RSK₂, RSK₂_inv, SSYT_SYT_pair_of_SYT_SYT_pair, RSK_right_inverse]
+
+theorem RSK₂_bijective (n : Nat) : Function.Bijective (RSK₂ (n:= n)) := by
+  apply Function.bijective_iff_has_inverse.mpr
+  apply Exists.intro RSK₂_inv
+  constructor
+  · apply Function.leftInverse_iff_comp.mpr
+    apply funext
+    intro var
+    exact RSK₂_left_inverse var
+  · apply Function.rightInverse_iff_comp.mpr
+    apply funext
+    intro var
+    exact RSK₂_right_inverse var
