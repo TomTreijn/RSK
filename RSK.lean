@@ -1300,7 +1300,8 @@ theorem bmpshft_ind_right_inverse (var : bmpshft_ind_out) :
       bmpshft_row_SSYT (bmpshft_row_SSYT_inv (row_SSYT_out_of_ind_out var)) =
       (row_SSYT_out_of_ind_out var) :=
       bmpshft_row_SSYT_right_inverse _
-    have is_none : (bmpshft_row_SSYT (bmpshft_row_SSYT_inv (row_SSYT_out_of_ind_out var))).k' = none := by
+    have is_none :
+      (bmpshft_row_SSYT (bmpshft_row_SSYT_inv (row_SSYT_out_of_ind_out var))).k' = none := by
       rw[right_inverse, row_SSYT_out_of_ind_out]
     simp_rw[bmpshft_row_in_next]
     simp_rw[right_inverse]
@@ -1546,16 +1547,30 @@ theorem bmpshft_left_inverse (var : bmpshft_in) : bmpshft_inv (bmpshft var) = va
   rw[bmpshft, bmpshft_inv]
   simp only [bmpshft_out_to_bmpshft_ind_out]
   have hstart_eq :
-
-
-  -- let var_in := bmpshft_in_to_bmpshft_row_SSYT_in var
-  -- let var_out : bmpshft_ind_out := bmpshft_ind var_in
-  -- have var_out_eq : var_out = bmpshft_ind (bmpshft_in_to_bmpshft_row_SSYT_in var) := by rfl
-  -- have left_inverse : bmpshft_ind_inv var_out = var_in := by
-  --   rw[var_out_eq]
-  --   exact bmpshft_ind_left_inverse var_in
-
+    (bmpshft_ind (bmpshft_in_to_bmpshft_row_SSYT_in var)).start_row = 0 := by
+    have := bmpshft_ind_start (bmpshft_in_to_bmpshft_row_SSYT_in var)
+    nth_rw 2 [bmpshft_in_to_bmpshft_row_SSYT_in] at this
+    exact this
+  let var_in := bmpshft_in_to_bmpshft_row_SSYT_in var
+  let var_out : bmpshft_ind_out := bmpshft_ind var_in
+  have var_out_eq : var_out = bmpshft_ind (bmpshft_in_to_bmpshft_row_SSYT_in var) := by rfl
+  have poij : ⟨var_out.cells,
+    var_out.hSSYT,
+    var_out.end_row,
+    var_out.hend_lt_len,
+    var_out.h_col,
+    0,
+    Nat.zero_le _,
+  ⟩ = var_out := by
+    congr
+    repeat
+    exact Eq.symm (bmpshft_ind_start var_in)
+  have left_inverse : bmpshft_ind_inv var_out = var_in := by
+    rw[var_out_eq]
+    exact bmpshft_ind_left_inverse _
+  rw[←poij] at left_inverse
   congr
+  repeat
   · rw[left_inverse]
     dsimp[var_in, bmpshft_in_to_bmpshft_row_SSYT_in]
 
@@ -1963,7 +1978,7 @@ example (a b : Nat) : a + b - 0 = a + b := by exact?
 theorem something₄ {a b : Nat} (h : 0 < a) : a + b - 1 + 1 = a + b := by omega
 
 theorem bmpshft_ind_count {a : Nat} :
-  (entries (bmpshft_ind var).var_out.cells).count a = (entries var.cells ++ [var.k]).count a := by
+  (entries (bmpshft_ind var).cells).count a = (entries var.cells ++ [var.k]).count a := by
   rw[bmpshft_ind]
   split
   · case _ h_eq_none =>
