@@ -358,18 +358,14 @@ example (a : Nat) (l : List Nat) : (a :: l = (a :: l).dropLast ++ [(a :: l).getL
 -- variable (cells : Grid)
 
 def IsSYT (cells : Grid) : Prop :=
-  List.Perm (entries cells) (List.range (size cells))
+  -- The entries are 1, 2, ..., n-1 where n is the size
+  (entries cells).Perm (List.range (size cells))
   ∧
   IsSSYT cells
 
 instance instDecidableIsSYT (cells : Grid) : Decidable (IsSYT cells) := instDecidableAnd
 
-example : IsSYT [[0, 1, 3], [2], [4]] := by
-  simp only [IsSYT]
-  constructor
-  · apply List.isPerm_iff.mp
-    decide
-  · grind[IsSYT, IsMonotone, IsSSYT, IsWeakInc, IsRowInc, IsMonotone, row_comp]
+example : IsSYT [[0, 1, 3], [2], [4]] := by decide
 
 theorem SYT_SSYT (hSYT : IsSYT cells) : IsSSYT cells := hSYT.right
 
