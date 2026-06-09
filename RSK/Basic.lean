@@ -30,3 +30,12 @@ example (a b : ℕ) (h : b ≠ 0) : (a / (Int.gcd a b)) / (b / (Int.gcd a b)) = 
 
 
 #eval (fun (a b : Nat) ↦ a ≤ b) 1 2
+
+structure Pos where
+    n : Nat
+    n_pos : 0 < n
+
+example (a b : Nat) (h : 0 < a) (h₂ : a = b) : 0 < b := by
+    let a_Pos : Pos := ⟨a, h⟩
+    have ha_Pos_eq : a_Pos = ⟨a, h⟩ := by rfl
+    rw[h₂] at ha_Pos_eq
