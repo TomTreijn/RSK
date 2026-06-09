@@ -33,7 +33,7 @@ example (a b : ℕ) (h : b ≠ 0) : (a / (Int.gcd a b)) / (b / (Int.gcd a b)) = 
 
 structure Pos where
     n : Nat
-    n_pos : 0 < n
+    h_pos : 0 < n
 
 example (a b : Nat) (h : 0 < a) (h₂ : a = b) : 0 < b := by
     let a_Pos : Pos := ⟨a, h⟩
