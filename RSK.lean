@@ -2135,6 +2135,9 @@ theorem RSK_inv_size :
   rw[RSK_right_inverse] at this
   exact this
 
+#eval RSK [1, 2, 4, 0]
+#eval RSK_inv ⟨[[1, 2, 3], [4, 5]], [[0, 1, 2], [3, 4]], by decide, by decide, by decide⟩
+
 theorem Perm_RSK_SYT (l : List Nat) (hPerm : l.Perm (List.range l.length)) :
   IsSYT (RSK l).P := by
   constructor

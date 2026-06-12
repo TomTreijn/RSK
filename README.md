@@ -1,13 +1,4 @@
 # RSK
+This is an implementation of the RSK correspondence in the proof assistant Lean.
 
-## GitHub configuration
-
-To set up your new GitHub repository, follow these steps:
-
-* Under your repository name, click **Settings**.
-* In the **Actions** section of the sidebar, click "General".
-* Check the box **Allow GitHub Actions to create and approve pull requests**.
-* Click the **Pages** section of the settings sidebar.
-* In the **Source** dropdown menu, select "GitHub Actions".
-
-After following the steps above, you can remove this section from the README file.
+The main proof can be found in ```RSK.lean```, the definition of mathematical objects alongside some helper theorems used in the proof can be found in ```RSK/...```. The examples used in the thesis can be found in ```Examples.lean```.
