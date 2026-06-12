@@ -1337,12 +1337,12 @@ theorem bmpshft_ind_right_inverse (var : bmpshft_ind_out) :
       have next_row_k : next_row_input.val.k = k := by
         dsimp[next_row_input]
         exact is_some
-      have aefpioh :
+      have next_row_start_pos :
         next_row_input.val.j > 0 := by
         rw[next_row_input.property]
         simp only [next_row_output]
         exact Nat.zero_lt_succ var.start_row
-      have some_sub_add := Nat.sub_add_cancel aefpioh
+      have some_sub_add := Nat.sub_add_cancel next_row_start_pos
       have get_bmpshft_ind_inv_out :
         ⟨next_row_input.val.cells,
           next_row_input.val.hSSYT,
@@ -2079,6 +2079,20 @@ theorem RSK_left_inverse (l : List Nat) :
     simp only [ne_eq, (RSK_step ⟨a, RSK as⟩).hnot_nil, not_false_eq_true, ↓reduceDIte]
     rw[RSK_step_left_inverse, RSK_left_inverse]
 
+theorem RSK_bijective : Function.Bijective RSK := by
+  apply Function.bijective_iff_has_inverse.mpr
+  apply Exists.intro RSK_inv
+  constructor
+  · apply Function.leftInverse_iff_comp.mpr
+    apply funext
+    intro var
+    exact RSK_left_inverse var
+  · apply Function.rightInverse_iff_comp.mpr
+    apply funext
+    intro var
+    exact RSK_right_inverse var
+
+
 theorem RSK_count {a : Nat} :
   (entries (RSK l).P).count a = l.count a := by
   rw[RSK.eq_def]
@@ -2120,6 +2134,9 @@ theorem RSK_inv_size :
   have := RSK_size (l := (RSK_inv pair))
   rw[RSK_right_inverse] at this
   exact this
+
+#eval RSK [1, 2, 4, 0]
+#eval RSK_inv ⟨[[1, 2, 3], [4, 5]], [[0, 1, 2], [3, 4]], by decide, by decide, by decide⟩
 
 theorem Perm_RSK_SYT (l : List Nat) (hPerm : l.Perm (List.range l.length)) :
   IsSYT (RSK l).P := by
