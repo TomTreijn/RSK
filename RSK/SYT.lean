@@ -1,350 +1,11 @@
 import RSK.OrderedList
 import RSK.SSYT
+import RSK.Basic
 import Mathlib.Tactic
+
 
 set_option relaxedAutoImplicit true
 
-def entries (cells : Grid) : List Nat :=
-  cells.flatten
-
-def shape (cells : Grid) : List Nat :=
-  cells.map (·.length)
-
-def size (cells : Grid) : Nat :=
-  (shape cells).sum
-
-/-- The size of a Grid is the number of entries -/
-theorem size_eq_entries_len (cells : Grid) :
-  (entries cells).length = size cells := by
-  rw[entries]
-  apply List.length_flatten
-
-theorem entries_nil : entries [] = [] := by
-  rw[entries, List.flatten_nil]
-
-theorem size_pos_of_length_pos (hSSYT : IsSSYT cells) (h_pos : 0 < cells.length) :
-  0 < size cells := by
-  match cells with
-  | [] => contradiction
-  | a :: as =>
-    rw[←size_eq_entries_len, entries, List.flatten_cons, List.length_append]
-    exact Nat.add_pos_left (List.length_pos_iff.mpr (SSYT_row_not_nil hSSYT 0 h_pos)) ?_
-
-theorem size_pos_of_not_nill (hSSYT : IsSSYT cells) (hnot_nil : cells ≠ []) :
-  0 < size cells :=
-  size_pos_of_length_pos hSSYT (List.length_pos_iff.mpr hnot_nil)
-
-theorem mem_entries_of_mem_row {a j : Nat} (hj_lt_len : j < cells.length) (h : a ∈ cells[j]) :
-  a ∈ entries cells := by
-  rw[entries, List.mem_flatten]
-  exact ⟨cells[j], ⟨List.mem_of_getElem (by rfl), h⟩⟩
-
-theorem shape_length_eq_length {cells : Grid} : (shape cells).length = cells.length := by
-  rw[shape, List.length_map]
-
-theorem shape_set :
-  shape (cells.set i row) = (shape cells).set i row.length := by
-  rw[shape, List.map_set, ←shape]
-
-theorem shape_dropLast :
-  shape (cells.dropLast) = (shape cells).dropLast := by
-  rw[shape, List.map_dropLast, ←shape]
-
-theorem length_eq_of_shape_eq :
-  shape cells₁ = shape cells₂ → cells₁.length = cells₂.length := by
-  intro shape_eq
-  repeat rw[←shape_length_eq_length]
-  rw[shape_eq]
-
-theorem shape_eq_notnil_eq :
-  shape cells₁ = shape cells₂ → (cells₁ ≠ [] ↔ cells₂ ≠ []) := by
-  intro hshape
-  repeat rw[←List.length_pos_iff]
-  rw[length_eq_of_shape_eq hshape]
-
-theorem rowlen_eq_shape (cells : Grid) (j : Nat) (hj : j < cells.length) :
-  cells[j].length = (shape cells)[j]'(by rw[shape_length_eq_length]; exact hj) := by
-  simp_rw[shape, List.getElem_map]
-
-
-theorem shape_increasing (hSSYT : IsSSYT cells) : IsWeakDec (shape cells) := by
-  refine wkdec_wkdec2.mpr ?_
-  rw[IsWeakDec2, IsMonotone2]
-  intro i j h₁ h₂
-  rw[shape_length_eq_length] at h₂
-  repeat rw[←rowlen_eq_shape]
-  exact diagram_decreasing hSSYT i j h₁ h₂
-
-theorem memEntry_of_memRow (cells : Grid) (j k : Nat)
-  (hj : j < cells.length) (hrow : k ∈ cells[j]) :
-  k ∈ entries cells := by
-  have hj_mem := List.getElem_mem hj
-  exact List.mem_flatten.mpr ⟨cells[j], ⟨hj_mem, hrow⟩⟩
-
-theorem getElem_entry (cells : Grid) (i j : Nat)
-  (hj : j < cells.length) (hi : i < cells[j].length) :
-  cells[j][i] ∈ entries cells := by
-  have hi_mem := List.getElem_mem hi
-  exact memEntry_of_memRow cells j cells[j][i] hj hi_mem
-
-theorem entry_getElem (cells : Grid) (k : Nat) (hk : k ∈ entries cells) :
-  ∃(j i : Nat) (hj_lt_len : j < cells.length) (hi_lt_len : i < cells[j].length), k = cells[j][i]
-   := by
-  rw[entries] at hk
-  have ⟨row, ⟨row_in_cell, k_in_row⟩⟩ := List.mem_flatten.mp hk
-  have ⟨j, ⟨hj, jrow⟩⟩:= List.getElem_of_mem row_in_cell
-  rw[←jrow] at k_in_row
-  have ⟨i, ⟨hi, krow⟩⟩:= List.getElem_of_mem k_in_row
-  exact ⟨j, ⟨i, ⟨hj, ⟨hi, Eq.symm krow⟩⟩⟩⟩
-
-structure location (cells : Grid) (k : Nat) where
-  i : Nat
-  j : Nat
-  hj_lt_len : j < cells.length
-  hi_lt_len : i < cells[j].length
-  eq : k = cells[j][i]
-
-def entry_location (cells : Grid) (k : Nat) (hk : k ∈ entries cells) : location cells k
-   :=
-  let j := cells.findIdx (k ∈ ·)
-  have hj_eq : j = cells.findIdx (k ∈ ·) := by rfl
-  have hj_lt_len : j < cells.length := by
-    apply List.findIdx_lt_length.mpr
-    simp[List.mem_flatten.mp hk]
-  have hk_in : k ∈ cells[j] := by
-    simp only [hj_eq]
-    simp (config := { singlePass := true }) only [← decide_eq_true_eq, Bool.decide_eq_true]
-    exact List.findIdx_getElem (w:=hj_lt_len)
-  let i := cells[j].findIdx (k = ·)
-  have hi_eq : i = cells[j].findIdx (k = ·) := by rfl
-  have hi_lt_len : i < cells[j].length := by
-    apply List.findIdx_lt_length.mpr
-    simp[hk_in]
-  have hk_eq : k = cells[j][i] := by
-    simp only [hi_eq]
-    simp (config := { singlePass := true }) only [← decide_eq_true_eq, Bool.decide_eq_true]
-    exact List.findIdx_getElem (w:=hi_lt_len)
-  ⟨i, j, hj_lt_len, hi_lt_len, hk_eq⟩
-
-theorem count_flatten_set (cells : Grid) (j a : Nat) (l : List Nat) (hj_lt_len : j < cells.length) :
-  (cells.set j l).flatten.count a = cells.flatten.count a + l.count a - cells[j].count a := by
-  rw[List.count_flatten]
-  rw[List.map_set, List.sum_set]
-  simp only [List.length_map, hj_lt_len, ↓reduceIte]
-  apply Eq.symm
-  calc
-    cells.flatten.count a + l.count a - cells[j].count a =
-    (cells.map (·.count a)).sum + l.count a - cells[j].count a := by simp[List.count_flatten]
-    _ = ((cells.map (·.count a)).take (j+1)).sum +
-        ((cells.map (·.count a)).drop (j+1)).sum +
-        l.count a - cells[j].count a :=
-          by simp[List.sum_take_add_sum_drop]
-    _ = ((cells.map (·.count a)).take j).sum + cells[j].count a +
-        ((cells.map (·.count a)).drop (j + 1)).sum +
-        l.count a - cells[j].count a := by
-      rw[List.sum_take_succ]
-      · rw[List.getElem_map]
-      · rw[List.length_map]
-        exact hj_lt_len
-    _ = _ := by
-      have triv : List.map (·.count a) cells = List.map (fun x ↦ List.count a x) cells := by rfl
-      rw[triv]
-      omega
-
-theorem count_entries_set (cells : Grid) (j a : Nat) (l : List Nat) (hj_lt_len : j < cells.length) :
-  (entries (cells.set j l)).count a = (entries cells).count a + l.count a - cells[j].count a := by
-  repeat rw[entries]
-  exact count_flatten_set cells j a l hj_lt_len
-
-theorem entries_add (cells : Grid) (k j : Nat)
-  (hj_lt_len : j < cells.length) :
-  List.Perm (entries (cells.set j (cells[j] ++ [k]))) (k::(entries cells)) := by
-  repeat rw[entries]
-  apply List.perm_iff_count.mpr
-  intro a
-  rw[count_flatten_set (hj_lt_len:=hj_lt_len)]
-  nth_rewrite 2 [←List.singleton_append]
-  repeat rw[List.count_append]
-  omega
-
-theorem entries_append (cells : Grid) :
-  entries (cells ++ [[k]]) = (entries cells) ++ [k] := by
-  repeat rw[entries]
-  rw[List.flatten_append, List.flatten_singleton]
-
-theorem count_dropLast (l : List Nat) (hnot_nil : l ≠ []) :
-  (l.dropLast.count k = l.count k - if l.getLast hnot_nil = k then 1 else 0) := by
-  match hl : l with
-  | [] => contradiction
-  | [a] =>
-    if h_a_eq_k : a = k then
-      simp [h_a_eq_k]
-    else
-      simp [h_a_eq_k]
-  | a :: b :: as =>
-    have hsub_notnil : b :: as ≠ [] := by simp
-    rw[List.dropLast, List.getLast, List.count_cons, List.count_cons]
-    · rw[count_dropLast (b :: as) hsub_notnil]
-      if hk_last : k = (b :: as).getLast hsub_notnil then
-        have poij : (b :: as).count ((b :: as).getLast hsub_notnil) > 0 := by
-          apply List.count_pos_iff.mpr
-          have mem := List.getLast_mem hsub_notnil
-          exact mem
-        simp only [hk_last, ↓reduceIte, beq_iff_eq]
-        omega
-      else
-        simp[Ne.symm hk_last]
-    · exact hsub_notnil
-
-/-- Removing an element from a grid also removes it from its entries. -/
-theorem entries_remove (cells : Grid) (j : Nat)
-  (hj_lt_len : j < cells.length) (hnot_nil : cells[j] ≠ []) :
-  List.Perm (entries (cells.set j (cells[j].dropLast)))
-  ((entries cells).erase (cells[j].getLast hnot_nil)) := by
-  repeat rw[entries]
-  apply List.perm_iff_count.mpr
-  intro a
-  rw[count_flatten_set (hj_lt_len := hj_lt_len), count_dropLast (hnot_nil := hnot_nil),
-  List.count_erase]
-  simp only [beq_iff_eq]
-  if hlast_a : cells[j].getLast hnot_nil = a then
-    have count_pos : cells[j].count a > 0 := by
-      apply List.count_pos_iff.mpr
-      rw[←hlast_a]
-      exact List.getLast_mem hnot_nil
-    simp only [hlast_a, ↓reduceIte]
-    omega
-  else
-    simp[hlast_a]
-
-theorem sum_dropLast (l : List Nat) (hnot_nil : l ≠ []) :
-  l.sum - l.getLast hnot_nil = l.dropLast.sum := by
-  match l with
-  | [] => contradiction
-  | [a] => simp
-  | a :: b :: as =>
-    have hbas_not_nil : b :: as ≠ [] := by exact List.cons_ne_nil b as
-    rw[List.dropLast, List.getLast, List.sum_cons]
-    · nth_rewrite 2 [List.sum_cons]
-      have := sum_dropLast (b :: as) hbas_not_nil
-      rw[←this]
-      rw[Nat.add_sub_assoc]
-      exact List.le_sum_of_mem (List.getLast_mem hbas_not_nil)
-    · exact hbas_not_nil
-
-theorem entries_dropLastRow {a} (cells : Grid) (hnot_nil : cells ≠ [])
-  (singleton : cells.getLast hnot_nil = [a]) :
-  List.Perm (entries cells.dropLast) ((entries cells).erase a) := by
-  repeat rw[entries]
-  apply List.perm_iff_count.mpr
-  intro b
-  rw[List.count_flatten, List.map_dropLast, ←sum_dropLast, List.count_erase,
-    List.getLast_eq_getElem, List.getElem_map]
-  · simp_rw[List.length_map]
-    rw[←List.getLast_eq_getElem, singleton, ←List.count_flatten]
-    · if hab : a = b then
-        simp[hab]
-      else
-        simp[hab]
-    · exact hnot_nil
-  · apply List.length_pos_iff.mp
-    rw[List.length_map]
-    apply List.length_pos_iff.mpr
-    exact hnot_nil
-
-theorem shape_add (cells : Grid) (k j : Nat)
-  (hj_lt_len : j < cells.length) :
-  shape (cells.set j (cells[j] ++ [k])) = (shape cells).modify j (· + 1) := by
-  repeat rw [shape]
-  apply List.ext_getElem
-  · simp
-  · intro i hi_lt_len
-    if hi_eq_j : j = i then
-      simp[hi_eq_j]
-    else
-      simp[hi_eq_j]
-
-theorem shape_remove (cells : Grid) (j : Nat)
-  (hj_lt_len : j < cells.length) :
-  (shape (cells.set j (cells[j].dropLast))) = (shape cells).modify j (· - 1) := by
-  repeat rw [shape]
-  apply List.ext_getElem
-  · simp
-  · intro i hi_lt_len
-    if hi_eq_j : j = i then
-      simp[hi_eq_j]
-    else
-      simp[hi_eq_j]
-
-theorem size_add (cells : Grid) (k j : Nat)
-  (hj_lt_len : j < cells.length) :
-  size (cells.set j (cells[j] ++ [k])) = size cells + 1 := by
-  rw[←size_eq_entries_len]
-  have entries_add_rw : (entries (cells.set j (cells[j] ++ [k]))).length =
-    (k::(entries cells)).length := by
-      apply List.Perm.length_eq
-      exact entries_add cells k j hj_lt_len
-  rw[entries_add_rw, List.length_cons]
-  rw[size_eq_entries_len]
-
-theorem size_append (cells : Grid) : size (cells ++ [[k]]) = size cells + 1 := by
-  rw[size, shape, List.map_append, List.map_singleton, List.length_singleton, List.sum_append,
-    List.sum_singleton, ←shape, ←size]
-
-theorem size_remove (cells : Grid) (j : Nat)
-  (hj_lt_len : j < cells.length) (hnot_nil : cells[j] ≠ []) :
-  size (cells.set j (cells[j].dropLast)) = size cells - 1 := by
-  rw[←size_eq_entries_len]
-  have entries_remove_rw : (entries (cells.set j (cells[j].dropLast))).length =
-    ((entries cells).erase (cells[j].getLast hnot_nil)).length := by
-      apply List.Perm.length_eq
-      exact entries_remove cells j hj_lt_len hnot_nil
-  have last_in_entries : cells[j].getLast hnot_nil ∈ entries cells := by
-    have in_row : cells[j].getLast hnot_nil ∈ cells[j] := List.getLast_mem hnot_nil
-    exact memEntry_of_memRow cells j (cells[j].getLast hnot_nil) hj_lt_len in_row
-  rw [entries_remove_rw, List.length_erase_of_mem last_in_entries]
-  rw [size_eq_entries_len]
-
-theorem size_dropLast (cells : Grid) (hnot_nil : cells ≠ [])
-  (hsingleton : (cells.getLast hnot_nil).length = 1) :
-  size (cells.dropLast) = size cells - 1 := by
-  repeat rw[←size_eq_entries_len, entries]
-  match cells with
-  | [] => contradiction
-  | [row] =>
-    rw [List.getLast_singleton] at hsingleton
-    rw[List.dropLast, List.flatten_nil, List.flatten_singleton, List.length_nil]
-    omega
-  | row₁ :: row₂ :: rest =>
-    have sub_ne_nil := List.cons_ne_nil row₂ rest
-    rw[List.dropLast, List.flatten_cons, List.flatten_cons]
-    repeat rw[List.length_append]
-    · rw[List.getLast] at hsingleton
-      have ih := size_dropLast (row₂ :: rest) sub_ne_nil hsingleton
-      repeat rw[←size_eq_entries_len, entries] at ih
-      rw[ih]
-      refine Eq.symm (Nat.add_sub_assoc ?_ row₁.length)
-      rw[List.length_flatten, ←List.dropLast_concat_getLast sub_ne_nil]
-      simp[hsingleton]
-    · simp[sub_ne_nil]
-
-theorem SSYT_size_zero_nil (hSSYT : IsSSYT cells) : size cells = 0 ↔ cells = [] := by
-  constructor
-  · intro hzero
-    rw[size, shape] at hzero
-    by_contra hP
-    have hlen_pos : 0 < cells.length := List.length_pos_iff.mpr hP
-    have hrow_len_pos : cells[0].length > 0 :=
-      List.length_pos_iff.mpr (SSYT_row_not_nil hSSYT 0 hlen_pos)
-    rw[←List.cons_head_tail hP, List.map, List.sum_cons, List.head_eq_getElem] at hzero
-    omega
-  · intro hnil
-    simp[size, shape, hnil]
-
-
-theorem SSYT_size_nzero_nnil (hSSYT : IsSSYT cells) : 0 < size cells ↔ cells ≠ [] := by
-  rw[←Nat.ne_zero_iff_zero_lt]
-  exact not_congr (SSYT_size_zero_nil hSSYT)
 
 
 
@@ -437,6 +98,36 @@ theorem SYT_row_increasing (hSYT : IsSYT cells)
     exact Nat.ne_of_lt hi₁_lt_i₂
   have := SYT_Nodup hSYT j j i₁ i₂ hj_lt_len hj_lt_len (by omega) hi₂_lt_len neq
   omega
+
+
+structure location (cells : Grid) (k : Nat) where
+  i : Nat
+  j : Nat
+  hj_lt_len : j < cells.length
+  hi_lt_len : i < cells[j].length
+  eq : k = cells[j][i]
+
+def entry_location (cells : Grid) (k : Nat) (hk : k ∈ entries cells) : location cells k
+   :=
+  let j := cells.findIdx (k ∈ ·)
+  have hj_eq : j = cells.findIdx (k ∈ ·) := by rfl
+  have hj_lt_len : j < cells.length := by
+    apply List.findIdx_lt_length.mpr
+    simp[List.mem_flatten.mp hk]
+  have hk_in : k ∈ cells[j] := by
+    simp only [hj_eq]
+    simp (config := { singlePass := true }) only [← decide_eq_true_eq, Bool.decide_eq_true]
+    exact List.findIdx_getElem (w:=hj_lt_len)
+  let i := cells[j].findIdx (k = ·)
+  have hi_eq : i = cells[j].findIdx (k = ·) := by rfl
+  have hi_lt_len : i < cells[j].length := by
+    apply List.findIdx_lt_length.mpr
+    simp[hk_in]
+  have hk_eq : k = cells[j][i] := by
+    simp only [hi_eq]
+    simp (config := { singlePass := true }) only [← decide_eq_true_eq, Bool.decide_eq_true]
+    exact List.findIdx_getElem (w:=hi_lt_len)
+  ⟨i, j, hj_lt_len, hi_lt_len, hk_eq⟩
 
 def SYT_size_location (cells : Grid) (hSYT : IsSYT cells) (hnot_nil : cells ≠ []) :
   location cells (size cells - 1) :=

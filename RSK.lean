@@ -1,6 +1,7 @@
 import Mathlib.Logic.Function.Basic
 import Mathlib.Data.SetLike.Basic
 import Mathlib.Tactic
+import RSK.Basic
 import RSK.OptionOrd
 import RSK.OrderedList
 import RSK.SSYT
