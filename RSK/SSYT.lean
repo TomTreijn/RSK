@@ -2,6 +2,7 @@ import RSK.OrderedList
 import Mathlib.Tactic
 
 set_option relaxedAutoImplicit true
+set_option linter.style.whitespace false
 
 /-
   This file contains the definition of a SSYT, alongside some theorems to use the defition.
@@ -70,6 +71,7 @@ theorem row_comp_trans (h₁ : row_comp row₁ row₂) (h₂ : row_comp row₂ r
     exact Nat.lt_trans (h_inc₁ i (Nat.lt_of_lt_of_le hi h_diagram₂)) (h_inc₂ i hi)
   exact ⟨h_diagram, h_inc⟩
 
+
 /-  In this section, the general definitions of theorems defined in optionOrd and OrderedList
     are applied to row_comp_trans.
 -/
@@ -101,19 +103,24 @@ theorem rowinc_front_rowinc (h : IsRowInc cells) : IsRowInc cells.dropLast :=
 theorem rowinc_tail_rowinc (h : IsRowInc (top :: rest)) : IsRowInc rest :=
   monotone_tail_monotone h
 
-/-  The definition of a SSYT:
+/- ------------------------------------------------------------------------------------------------
+    The definition of a SSYT:
     The rows obey the row_comp property and
     every row:
     - is not empty
     - is weakly increasing.
--/
+------------------------------------------------------------------------------------------------ -/
 def IsSSYT (cells : Grid) : Prop :=
   (∀ (j : Nat) (h : j < cells.length), IsWeakInc cells[j] ∧ cells[j] ≠ []) ∧
   IsRowInc cells
 
+-- Convincing lean that it can algorithmically check that something is a SSYT.
 instance instDecidableIsSSYT (cells : Grid) : Decidable (IsSSYT cells) := instDecidableAnd
-
 example : IsSSYT [[1, 2, 2, 3], [2, 3, 4], [5]] := by decide
+
+
+/- The next section are some theorems of properties of SSYTs.
+-/
 
 -- Some trivial results from the definition.
 theorem SSYT_rows_inc (hSSYT : IsSSYT cells) : IsRowInc cells := hSSYT.right
@@ -145,6 +152,11 @@ theorem SSYT_row_increasing (hSSYT : IsSSYT cells)
   cells[j][i₁] ≤ cells[j][i₂] :=
   wkinc_wkinc2.mp (hSSYT.left j hj_lt_len).left i₁ i₂ hi₁_lt_i₂ hi₂_lt_len
 
+
+/-  The next section lists some ways of modifying a SSYT such that the result of the
+    modification is also a SSYT.
+-/
+
 -- Removing the top row of a SSYT results in a SSYT.
 theorem SSYT_sub_SSYT (hSSYT : IsSSYT (top :: rest)) : IsSSYT rest := by
   constructor
@@ -153,7 +165,6 @@ theorem SSYT_sub_SSYT (hSSYT : IsSSYT (top :: rest)) : IsSSYT rest := by
     rw [List.getElem_cons_succ] at this
     exact this
   · exact rowinc_tail_rowinc hSSYT.right
-
 
 /-  Adding a entry to the bottom of a SSYT is valid if
     the entry is larger than the current bottom-left entry.
@@ -410,14 +421,3 @@ theorem SSYT_remove (hSSYT : IsSSYT cells) (j : Nat)
       intro j hj_lt_len
       exact hSSYT.left j (Nat.lt_of_lt_pred hj_lt_len)
     · exact rowinc_front_rowinc hSSYT.right
-
-example (a : Nat) : [a].length = 1 := by exact List.length_singleton
-example (a b : Nat) (h : a < b) : (a - 1 < b) := by exact Nat.sub_lt_of_lt h
-example (a b : Nat) (h : a ≤ b) : (a - 1 ≤ b) := by omega
-
-example (a b : Nat) (h : a < b) (h2 : a + 1 ≠ b) : (a + 1 < b) := Nat.lt_of_le_of_ne h h2
-example (l : List Nat) (p : Nat → Bool) : (∀ e ∈ l.takeWhile p, p e) := by
-  have ijij := List.all_takeWhile (l:=l) (p:=p)
-  grind
-example (a b : Nat) (h : b = a) : a ≤ b := by exact Nat.le_of_eq (id (Eq.symm h))
-example (a : Nat) (h : a ≠ 0) : a - 1 < a := by exact Nat.sub_one_lt h
