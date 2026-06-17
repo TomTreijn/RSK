@@ -3,11 +3,40 @@ import Mathlib.Tactic
 
 set_option relaxedAutoImplicit true
 
+/-
+  This file contains the definition of a SSYT, alongside some theorems to use the defition.
+  A Grid is just a List of Lists of Nats.
+  In this file, a Semistandard Young tableau is Grid with the following
+  properties:
+   - The length of the Lists is decreasing. So the SSYT has the shape of a Young diagram.
+   - The columns are strictly increasing.
+   - The rows are weakly increasing
+
+  The third property is defined using the definition of an ordered List.
+  The first and second properties are defined using a relation between lists called row_comp,
+  which is true if the bottom list is shorter than the top list and each entry in the bottom
+  list is strictly less than the entry in the top list.
+  Then the List of List of Nats is an ordered list with respect to row_comp.
+
+  The three properties are also stated as theorems:
+   - diagram_decreasing
+   - SSYT_col_increasing
+   - SSYT_row_increasing
+
+  Additionally, some theorems are defined which help remove, add or set an entry in a semi
+  standard Young tableau.
+-/
+
 abbrev Grid := List (List Nat)
 
+/- True if the row₁ is longer than row₂ and every entry of row₂ is strictly less than the
+  corresponding entry in row₁.-/
 def row_comp (row₁ row₂ : List Nat) : Prop :=
   ∃(h_diagram : row₂.length ≤ row₁.length), ∀(i : Nat) (hi : i < row₂.length), row₁[i] < row₂[i]
 
+/-  States an equivalent definition of row_comp, and proves that these are equivalent.
+    This is used because the Exists statement is not algorithmically verifiable.
+-/
 theorem row_comp₂ (row₁ row₂ : List Nat) :
   row_comp row₁ row₂ ↔
   if h_diagram : row₂.length ≤ row₁.length then
@@ -26,9 +55,11 @@ theorem row_comp₂ (row₁ row₂ : List Nat) :
       intro f
       exact False.elim f
 
+-- Shows that row_comp can be verified algorithmically
 instance instDecidable_row_comp (row₁ row₂ : List Nat) : Decidable (row_comp row₁ row₂) :=
   decidable_of_decidable_of_iff (Iff.symm (row_comp₂ row₁ row₂))
 
+-- Shows that row_comp is a transitive property, this is needed to define an ordered list.
 theorem row_comp_trans (h₁ : row_comp row₁ row₂) (h₂ : row_comp row₂ row₃) :
   row_comp row₁ row₃ := by
   have ⟨h_diagram₁, h_inc₁⟩ := h₁
@@ -39,6 +70,9 @@ theorem row_comp_trans (h₁ : row_comp row₁ row₂) (h₂ : row_comp row₂ r
     exact Nat.lt_trans (h_inc₁ i (Nat.lt_of_lt_of_le hi h_diagram₂)) (h_inc₂ i hi)
   exact ⟨h_diagram, h_inc⟩
 
+/-  In this section, the general definitions of theorems defined in optionOrd and OrderedList
+    are applied to row_comp_trans.
+-/
 def op_lst (a b : Option (List Nat)) := option_r (row_comp · ·) a b
 theorem op_lst_some : op_lst (some a) (some b) = (row_comp a b) := by rfl
 theorem op_lst_none_l : op_lst none a := option_r_left_none row_comp
@@ -67,6 +101,12 @@ theorem rowinc_front_rowinc (h : IsRowInc cells) : IsRowInc cells.dropLast :=
 theorem rowinc_tail_rowinc (h : IsRowInc (top :: rest)) : IsRowInc rest :=
   monotone_tail_monotone h
 
+/-  The definition of a SSYT:
+    The rows obey the row_comp property and
+    every row:
+    - is not empty
+    - is weakly increasing.
+-/
 def IsSSYT (cells : Grid) : Prop :=
   (∀ (j : Nat) (h : j < cells.length), IsWeakInc cells[j] ∧ cells[j] ≠ []) ∧
   IsRowInc cells
@@ -75,19 +115,21 @@ instance instDecidableIsSSYT (cells : Grid) : Decidable (IsSSYT cells) := instDe
 
 example : IsSSYT [[1, 2, 2, 3], [2, 3, 4], [5]] := by decide
 
-
+-- Some trivial results from the definition.
 theorem SSYT_rows_inc (hSSYT : IsSSYT cells) : IsRowInc cells := hSSYT.right
 theorem SSYT_row_weak (hSSYT : IsSSYT cells) (j : Nat) (h : j < cells.length) :
   IsWeakInc cells[j] := (hSSYT.left j h).left
 theorem SSYT_row_not_nil (hSSYT : IsSSYT cells) (j : Nat) (h : j < cells.length) :
   cells[j] ≠ [] := (hSSYT.left j h).right
 
+-- Given two rows, the bottom row is shorter than the top row.
 theorem diagram_decreasing (hSSYT : IsSSYT cells)
   (j₁ j₂ : Nat) (hj₁_lt_j₂ : j₁ < j₂) (hj₂_lt_len : j₂ < cells.length) :
   cells[j₁].length ≥ cells[j₂].length := by
   have ⟨h_diagram, _⟩ := rowinc_rowinc2.mp hSSYT.right j₁ j₂ hj₁_lt_j₂ hj₂_lt_len
   exact h_diagram
 
+-- Given two positions in a column, the top entry is strictly smaller than the bottom entry.
 theorem SSYT_col_increasing (hSSYT : IsSSYT cells)
   (i j₁ j₂ : Nat) (hj₁_lt_j₂ : j₁ < j₂)
   (hj₂_lt_len : j₂ < cells.length) (hi_lt_len : i < cells[j₂].length) :
@@ -96,12 +138,14 @@ theorem SSYT_col_increasing (hSSYT : IsSSYT cells)
   have ⟨_, inc⟩ := rowinc_rowinc2.mp hSSYT.right j₁ j₂ hj₁_lt_j₂ hj₂_lt_len
   exact inc i hi_lt_len
 
+-- Given two positions in a row, the left entry is smaller than the right entry.
 theorem SSYT_row_increasing (hSSYT : IsSSYT cells)
   (i₁ i₂ j : Nat) (hj_lt_len : j < cells.length) (hi₁_lt_i₂ : i₁ < i₂)
   (hi₂_lt_len : i₂ < cells[j].length) :
   cells[j][i₁] ≤ cells[j][i₂] :=
   wkinc_wkinc2.mp (hSSYT.left j hj_lt_len).left i₁ i₂ hi₁_lt_i₂ hi₂_lt_len
 
+-- Removing the top row of a SSYT results in a SSYT.
 theorem SSYT_sub_SSYT (hSSYT : IsSSYT (top :: rest)) : IsSSYT rest := by
   constructor
   · intro j hj_lt_len
@@ -110,6 +154,10 @@ theorem SSYT_sub_SSYT (hSSYT : IsSSYT (top :: rest)) : IsSSYT rest := by
     exact this
   · exact rowinc_tail_rowinc hSSYT.right
 
+
+/-  Adding a entry to the bottom of a SSYT is valid if
+    the entry is larger than the current bottom-left entry.
+-/
 theorem SSYT_append_row (hSSYT : IsSSYT cells) (k : Nat)
   (h_col_above :
     if hcells : cells.length = 0 then
@@ -149,6 +197,11 @@ theorem SSYT_append_row (hSSYT : IsSSYT cells) (k : Nat)
             exact h_col_above
           ⟩
 
+/-  Adding a entry k to a row j results in a SSYT if:
+     - The new row j is weakly increasing
+     - j = 0 or row j - 1 is strictly longer than row j
+     - j = 0 or the new entry k is strictly larger than the entry above.
+-/
 theorem SSYT_append (hSSYT : IsSSYT cells) (j : Nat) (k : Nat)
   (hj_lt_len : j < cells.length)
   (hst_dec : j = 0 ∨ cells[j].length < cells[j - 1].length)
@@ -211,6 +264,11 @@ theorem SSYT_append (hSSYT : IsSSYT cells) (j : Nat) (k : Nat)
             exact SSYT_col_increasing hSSYT i j (j + 1) (lt_add_one j) hsuccj_lt hi
           ⟩
 
+/-  Setting an entry k to k' at (j, i) results in a SSYT if:
+     - The new row j is weakly increasing
+     - j = 0 or the new entry k is strictly larger than the entry above.
+     - j = 0 or the new entry k is strictly smaller than the entry below.
+-/
 theorem SSYT_set (hSSYT : IsSSYT cells) (j i : Nat) (k : Nat)
   (hj_lt_len : j < cells.length)
   (hi_lt_len : i < cells[j].length)
@@ -287,6 +345,9 @@ theorem SSYT_set (hSSYT : IsSSYT cells) (j i : Nat) (k : Nat)
                 exact SSYT_col_increasing hSSYT i₂ j (j + 1) (lt_add_one j) hsuccj_lt_len hi₂_lt_len
             ⟩
 
+/-  Removing an entry from row j results in a SSYT if:
+     - j is the bottom row, or it is stricty longer than the row j + 1 below.
+-/
 theorem SSYT_remove (hSSYT : IsSSYT cells) (j : Nat)
   (hj_lt_len : j < cells.length)
   (hst_dec :
