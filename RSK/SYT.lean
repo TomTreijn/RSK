@@ -6,8 +6,11 @@ import Mathlib.Tactic
 
 set_option relaxedAutoImplicit true
 
-
-
+/-
+    This file contains the definition of a SYT, along side some theorems to use the definition.
+    A stanard Young tableau is a Young tableau with 0, 1, 2, ... as entries, which is how it is
+    defined using List.Perm.
+-/
 
 def IsSYT (cells : Grid) : Prop :=
   -- The entries are 1, 2, ..., n-1 where n is the size
@@ -15,11 +18,13 @@ def IsSYT (cells : Grid) : Prop :=
   ∧
   IsSSYT cells
 
+-- Convince lean that it can algorithmically check if something is a SSYT.
 instance instDecidableIsSYT (cells : Grid) : Decidable (IsSYT cells) := instDecidableAnd
 example : IsSYT [[0, 1, 3], [2], [4]] := by decide
 
 theorem SYT_SSYT (hSYT : IsSYT cells) : IsSSYT cells := hSYT.right
 
+-- Every number less than the size of the SYT is a member of the SYT
 theorem SYT_le_mem (hSYT : IsSYT cells) (k : Nat) (hk : k < size cells) :
   k ∈ entries cells := by
   have hk_in_range : k ∈ List.range (size cells) := List.mem_range.mpr hk
@@ -30,6 +35,7 @@ theorem SYT_size_mem (hSYT : IsSYT cells) (hnot_nil : cells ≠ []) :
   have size_pos : size cells > 0 := (SSYT_size_nzero_nnil (SYT_SSYT hSYT)).mpr hnot_nil
   exact SYT_le_mem hSYT (size cells - 1) (Nat.sub_one_lt_of_lt size_pos)
 
+-- Every entry of a SYT is less than the size
 theorem SYT_getElem_le (hSYT : IsSYT cells) (i j : Nat)
   (hj : j < cells.length) (hi : i < cells[j].length) :
   cells[j][i] < size cells := by
@@ -37,23 +43,12 @@ theorem SYT_getElem_le (hSYT : IsSYT cells) (i j : Nat)
   have hji_mem_range := (List.Perm.mem_iff hSYT.left).mp hji_mem
   exact List.mem_range.mp hji_mem_range
 
+-- There are no duplicate entries
 theorem SYT_entries_Nodup (hSYT : IsSYT cells) : (entries cells).Nodup := by
   have unique := hSYT.left
   exact List.Perm.nodup (List.Perm.symm unique) (List.nodup_range)
 
-theorem nodup_iff_getElem_ne_getElem {l : List Nat} (hnodup : l.Nodup) (i j : Nat)
- (hi_ne_j : i ≠ j) (hi_lt_len : i < l.length) (hj_lt_len : j < l.length) :
-  l[i] ≠ l[j] := by
-  if hi_lt_j : i < j then
-    have li_ne_lj := List.nodup_iff_getElem?_ne_getElem?.mp hnodup i j hi_lt_j hj_lt_len
-    simp only [hi_lt_len, getElem?_pos, hj_lt_len, ne_eq, Option.some.injEq] at li_ne_lj
-    exact li_ne_lj
-  else
-    have hj_lt_i : j < i := by omega
-    have li_ne_lj := List.nodup_iff_getElem?_ne_getElem?.mp hnodup j i hj_lt_i hi_lt_len
-    simp only [hj_lt_len, getElem?_pos, hi_lt_len, ne_eq, Option.some.injEq] at li_ne_lj
-    exact Ne.symm li_ne_lj
-
+-- Given two different positions in a SYT, the entries at these positions are different
 theorem SYT_Nodup (hSYT : IsSYT cells) (j₁ j₂ i₁ i₂ : Nat)
   (hj₁_lt_len : j₁ < cells.length)
   (hj₂_lt_len : j₂ < cells.length)
@@ -88,6 +83,7 @@ theorem SYT_Nodup (hSYT : IsSYT cells) (j₁ j₂ i₁ i₂ : Nat)
         cells[j₁][i₁] (List.getElem_mem hi₁_lt_len)
 )
 
+-- The rows of a SYT are strictly increasing
 theorem SYT_row_increasing (hSYT : IsSYT cells)
   (i₁ i₂ j : Nat) (hj_lt_len : j < cells.length) (hi₁_lt_i₂ : i₁ < i₂)
   (hi₂_lt_len : i₂ < cells[j].length) :
@@ -99,14 +95,18 @@ theorem SYT_row_increasing (hSYT : IsSYT cells)
   have := SYT_Nodup hSYT j j i₁ i₂ hj_lt_len hj_lt_len (by omega) hi₂_lt_len neq
   omega
 
-
+-- A type describing the location of a k in a Grid.
 structure location (cells : Grid) (k : Nat) where
+  -- The column of the location
   i : Nat
+  -- The row of the location
   j : Nat
   hj_lt_len : j < cells.length
   hi_lt_len : i < cells[j].length
+  -- The entry at this row and column is indeed k
   eq : k = cells[j][i]
 
+-- Given a k in a Grid, this gives one of the possible locations of k in this grid.
 def entry_location (cells : Grid) (k : Nat) (hk : k ∈ entries cells) : location cells k
    :=
   let j := cells.findIdx (k ∈ ·)
@@ -129,10 +129,12 @@ def entry_location (cells : Grid) (k : Nat) (hk : k ∈ entries cells) : locatio
     exact List.findIdx_getElem (w:=hi_lt_len)
   ⟨i, j, hj_lt_len, hi_lt_len, hk_eq⟩
 
+-- This gives the location of the largest element is a SYT
 def SYT_size_location (cells : Grid) (hSYT : IsSYT cells) (hnot_nil : cells ≠ []) :
   location cells (size cells - 1) :=
   entry_location cells (size cells - 1) (SYT_size_mem hSYT hnot_nil)
 
+-- The largest element in a SYT is at the end of its row.
 theorem SYT_size_location_col (hSYT : IsSYT cells) (hnot_nil : cells ≠ []) :
   let location := SYT_size_location cells hSYT hnot_nil
   have := location.hj_lt_len
@@ -152,6 +154,7 @@ theorem SYT_size_location_col (hSYT : IsSYT cells) (hnot_nil : cells ≠ []) :
   have := SYT_getElem_le hSYT (cells[location.j].length - 1) location.j hj_lt_len hsublen_lt_len
   omega
 
+-- The row containing the largest entry is strictly longer than the row below
 theorem SYT_size_location_hcol (hSYT : IsSYT cells) (hnot_nil : cells ≠ []) :
   let location := SYT_size_location cells hSYT hnot_nil
   if hsuccj_len : location.j + 1 < List.length cells then
@@ -175,6 +178,7 @@ theorem SYT_size_location_hcol (hSYT : IsSYT cells) (hnot_nil : cells ≠ []) :
     omega
   · case _ => trivial
 
+-- Adds a box to a SYT at a given row (containing the size of the current SYT)
 @[simp]
 def SYT_add_cells (cells : Grid) (j : Nat) : Grid :=
   if hj_le_len : j < cells.length then
@@ -193,6 +197,8 @@ theorem SYT_add_cells_not_nil :
   · case _ =>
     exact List.concat_ne_nil [size cells] cells
 
+-- Expanding a SYT at a row j with a box containing the size of the current SYT is valid if:
+-- - Row j is the top row or row j is shorter than the row above
 theorem SYT_add (hSYT : IsSYT cells) (j : Nat)
   (h_col :
     if hzero_lt_j_lt_len : 0 < j ∧ j < cells.length then
@@ -241,7 +247,46 @@ theorem SYT_add (hSYT : IsSYT cells) (j : Nat)
         have hzero_lt_row := List.length_pos_iff.mpr hnot_nil
         exact SYT_getElem_le hSYT 0 (cells.length - 1) hsublen_lt_len hzero_lt_row
 
+-- If we expand a SYT, then the location of the largest entry is the location of the added box.
+theorem SYT_size_location_add_cells (hSYT : IsSYT cells) (j : Nat)
+  (hj_lt_len : j ≤ cells.length) (h_col) :
+  (SYT_size_location (SYT_add_cells cells j) (SYT_add hSYT j h_col) (SYT_add_cells_not_nil)).j = j
+  := by
+  simp_rw[SYT_size_location, entry_location, SYT_add_cells]
+  split
+  · case _ hj_lt_len =>
+    rw[size_add, Nat.add_sub_self_right]
+    refine (List.findIdx_eq ?_).mpr ?_
+    · rw[List.length_set]
+      exact hj_lt_len
+    · constructor
+      · rw[List.getElem_set_self, decide_eq_true_iff.mpr]
+        exact List.mem_concat_self
+      · intro j₂ hj₂_lt_j
+        have hj₂_ne_j : j ≠ j₂ := Ne.symm (Nat.ne_of_lt hj₂_lt_j)
+        have hj₂_lt_len : j₂ < cells.length := Nat.lt_trans hj₂_lt_j hj_lt_len
+        rw[List.getElem_set_ne hj₂_ne_j, decide_eq_false_iff_not, List.mem_iff_getElem]
+        apply not_exists_mem.mpr
+        intro i hi_lt_len
+        exact Nat.ne_of_lt (SYT_getElem_le hSYT i j₂ hj₂_lt_len hi_lt_len)
+  · case _ hj =>
+    have hj_eq_len : j = cells.length := by omega
+    have hj_lt_nlen : j < (cells ++ [[size cells]]).length := by
+      rw[List.length_append, List.length_singleton]
+      omega
+    apply (List.findIdx_eq hj_lt_nlen).mpr
+    simp_rw[hj_eq_len]
+    rw[size_append, Nat.add_sub_self_right]
+    constructor
+    · rw[decide_eq_true_iff.mpr]
+      rw[List.getElem_append_right (by omega), List.getElem_singleton, List.mem_singleton]
+    · intro j₂ hj₂_lt_len
+      rw[List.getElem_append_left hj₂_lt_len, decide_eq_false_iff_not, List.mem_iff_getElem,
+        not_exists_mem]
+      intro i hi_lt_len
+      exact Nat.ne_of_lt (SYT_getElem_le hSYT i j₂ hj₂_lt_len hi_lt_len)
 
+-- Removes the largest entry from a SYT
 @[simp]
 def SYT_remove_cells (cells : Grid) (hSYT : IsSYT cells) (hnot_nil : cells ≠ []) : Grid :=
   let j := (SYT_size_location cells hSYT hnot_nil).j
@@ -251,6 +296,7 @@ def SYT_remove_cells (cells : Grid) (hSYT : IsSYT cells) (hnot_nil : cells ≠ [
   else
     cells.dropLast
 
+-- Removing the largest entry from a SYT results in a SYT
 theorem SYT_remove (hSYT : IsSYT cells) (hnot_nil : cells ≠ []) :
   IsSYT (SYT_remove_cells cells hSYT hnot_nil) := by
   have hSSYT := SYT_SSYT hSYT
@@ -325,7 +371,7 @@ theorem SYT_remove (hSYT : IsSYT cells) (hnot_nil : cells ≠ []) :
       simp only [hsingleton, ↓reduceIte]
       rw[size_dropLast cells hnot_nil]
       · rw[(List.Perm.congr_left (entries_dropLastRow cells hnot_nil hlast_subsize))]
-        -- code dublication
+        -- NOTE: code dublication
         have := hSYT.left
         apply List.perm_iff_count.mpr
         intro a
@@ -349,6 +395,7 @@ theorem SYT_remove (hSYT : IsSYT cells) (hnot_nil : cells ≠ []) :
     apply SSYT_remove (hSSYT)
     exact SYT_size_location_hcol hSYT hnot_nil
 
+-- Removing and adding to a SYT are eachothers inverses.
 theorem SYT_add_right_inverse (hSYT : IsSYT cells) (hnot_nil : cells ≠ []) :
   SYT_add_cells (SYT_remove_cells cells hSYT hnot_nil)
   (SYT_size_location cells hSYT hnot_nil).j = cells := by
@@ -404,44 +451,6 @@ theorem SYT_add_right_inverse (hSYT : IsSYT cells) (hnot_nil : cells ≠ []) :
     simp_rw[loc.eq, hi_eq, hj_eq_sublen, ←List.getLast_eq_getElem hnot_nil,
       ←List.eq_getElem_of_length_eq_one (List.getLast cells hnot_nil) hlenj_one,
       List.dropLast_append_getLast]
-
-theorem SYT_size_location_add_cells (hSYT : IsSYT cells) (j : Nat)
-  (hj_lt_len : j ≤ cells.length) (h_col) :
-  (SYT_size_location (SYT_add_cells cells j) (SYT_add hSYT j h_col) (SYT_add_cells_not_nil)).j = j
-  := by
-  simp_rw[SYT_size_location, entry_location, SYT_add_cells]
-  split
-  · case _ hj_lt_len =>
-    rw[size_add, Nat.add_sub_self_right]
-    refine (List.findIdx_eq ?_).mpr ?_
-    · rw[List.length_set]
-      exact hj_lt_len
-    · constructor
-      · rw[List.getElem_set_self, decide_eq_true_iff.mpr]
-        exact List.mem_concat_self
-      · intro j₂ hj₂_lt_j
-        have hj₂_ne_j : j ≠ j₂ := Ne.symm (Nat.ne_of_lt hj₂_lt_j)
-        have hj₂_lt_len : j₂ < cells.length := Nat.lt_trans hj₂_lt_j hj_lt_len
-        rw[List.getElem_set_ne hj₂_ne_j, decide_eq_false_iff_not, List.mem_iff_getElem]
-        apply not_exists_mem.mpr
-        intro i hi_lt_len
-        exact Nat.ne_of_lt (SYT_getElem_le hSYT i j₂ hj₂_lt_len hi_lt_len)
-  · case _ hj =>
-    have hj_eq_len : j = cells.length := by omega
-    have hj_lt_nlen : j < (cells ++ [[size cells]]).length := by
-      rw[List.length_append, List.length_singleton]
-      omega
-    apply (List.findIdx_eq hj_lt_nlen).mpr
-    simp_rw[hj_eq_len]
-    rw[size_append, Nat.add_sub_self_right]
-    constructor
-    · rw[decide_eq_true_iff.mpr]
-      rw[List.getElem_append_right (by omega), List.getElem_singleton, List.mem_singleton]
-    · intro j₂ hj₂_lt_len
-      rw[List.getElem_append_left hj₂_lt_len, decide_eq_false_iff_not, List.mem_iff_getElem,
-        not_exists_mem]
-      intro i hi_lt_len
-      exact Nat.ne_of_lt (SYT_getElem_le hSYT i j₂ hj₂_lt_len hi_lt_len)
 
 theorem SYT_add_left_inverse (hSYT : IsSYT cells) (j : Nat) (hj_le_len : j ≤ cells.length) (h_col) :
   SYT_remove_cells (SYT_add_cells cells j) (SYT_add hSYT j h_col) (SYT_add_cells_not_nil) = cells

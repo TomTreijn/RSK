@@ -1,5 +1,11 @@
 import Mathlib.Tactic
+/-
+    This file contains some basic statements on basic operations which where useful
+    for the proof, but are not in base Lean or mathlib.
+-/
 
+
+-- Changing a row in a grid removes the entries originally in this row and adds the new entries.
 theorem count_flatten_set (cells : List (List Nat)) (j a : Nat) (l : List Nat)
   (hj_lt_len : j < cells.length) :
   (cells.set j l).flatten.count a = cells.flatten.count a + l.count a - cells[j].count a := by
@@ -26,6 +32,9 @@ theorem count_flatten_set (cells : List (List Nat)) (j a : Nat) (l : List Nat)
       rw[triv]
       omega
 
+-- Given a list l and a number k, The number of k's in l withouth the last entry is equal
+-- to the number of k's in l if the last entry of l is not k.
+-- Otherwise, it is one less.
 theorem count_dropLast (l : List Nat) (hnot_nil : l ≠ []) :
   (l.dropLast.count k = l.count k - if l.getLast hnot_nil = k then 1 else 0) := by
   match hl : l with
@@ -80,3 +89,18 @@ theorem lt_findIdx_false (l : List α) (p : α → Bool) : ∀(i : Nat) (hi_lt_f
       Nat.lt_of_le_of_ne List.findIdx_le_length h_find_eq_len
     have := ((List.findIdx_eq h_find_lt_len).mp (by rfl)).right i hi_lt_find
     exact ne_true_of_eq_false this
+
+-- Given a list with no duplicate entries, and two different indices, the entries at these indices
+-- are different.
+theorem nodup_iff_getElem_ne_getElem {l : List Nat} (hnodup : l.Nodup) (i j : Nat)
+ (hi_ne_j : i ≠ j) (hi_lt_len : i < l.length) (hj_lt_len : j < l.length) :
+  l[i] ≠ l[j] := by
+  if hi_lt_j : i < j then
+    have li_ne_lj := List.nodup_iff_getElem?_ne_getElem?.mp hnodup i j hi_lt_j hj_lt_len
+    simp only [hi_lt_len, getElem?_pos, hj_lt_len, ne_eq, Option.some.injEq] at li_ne_lj
+    exact li_ne_lj
+  else
+    have hj_lt_i : j < i := by omega
+    have li_ne_lj := List.nodup_iff_getElem?_ne_getElem?.mp hnodup j i hj_lt_i hi_lt_len
+    simp only [hj_lt_len, getElem?_pos, hi_lt_len, ne_eq, Option.some.injEq] at li_ne_lj
+    exact Ne.symm li_ne_lj
