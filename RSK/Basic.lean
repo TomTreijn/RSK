@@ -64,3 +64,19 @@ theorem sum_dropLast (l : List Nat) (hnot_nil : l ≠ []) :
       rw[Nat.add_sub_assoc]
       exact List.le_sum_of_mem (List.getLast_mem hbas_not_nil)
     · exact hbas_not_nil
+
+/-- p is false for all items before findIdx p -/
+theorem lt_findIdx_false (l : List α) (p : α → Bool) : ∀(i : Nat) (hi_lt_find : i < l.findIdx p),
+  have hi_lt_len := Nat.lt_of_lt_of_le hi_lt_find List.findIdx_le_length
+  ¬ p l[i] := by
+  intro i hi_lt_find
+  have hi_lt_len := Nat.lt_of_lt_of_le hi_lt_find List.findIdx_le_length
+  if h_find_eq_len : l.findIdx p = l.length then
+    have := List.findIdx_eq_length.mp h_find_eq_len
+    have := this l[i] (List.getElem_mem hi_lt_len)
+    exact ne_true_of_eq_false this
+  else
+    have h_find_lt_len : l.findIdx p < l.length :=
+      Nat.lt_of_le_of_ne List.findIdx_le_length h_find_eq_len
+    have := ((List.findIdx_eq h_find_lt_len).mp (by rfl)).right i hi_lt_find
+    exact ne_true_of_eq_false this

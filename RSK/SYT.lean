@@ -133,7 +133,7 @@ def SYT_size_location (cells : Grid) (hSYT : IsSYT cells) (hnot_nil : cells ≠ 
   location cells (size cells - 1) :=
   entry_location cells (size cells - 1) (SYT_size_mem hSYT hnot_nil)
 
-def SYT_size_location_col (hSYT : IsSYT cells) (hnot_nil : cells ≠ []) :
+theorem SYT_size_location_col (hSYT : IsSYT cells) (hnot_nil : cells ≠ []) :
   let location := SYT_size_location cells hSYT hnot_nil
   have := location.hj_lt_len
   location.i = cells[location.j].length - 1 := by

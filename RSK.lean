@@ -9,21 +9,28 @@ import RSK.SYT
 
 set_option relaxedAutoImplicit true
 
-/-- p is false for all items before findIdx p -/
-theorem lt_findIdx_false (l : List α) (p : α → Bool) : ∀(i : Nat) (hi_lt_find : i < l.findIdx p),
-  have hi_lt_len := Nat.lt_of_lt_of_le hi_lt_find List.findIdx_le_length
-  ¬ p l[i] := by
-  intro i hi_lt_find
-  have hi_lt_len := Nat.lt_of_lt_of_le hi_lt_find List.findIdx_le_length
-  if h_find_eq_len : l.findIdx p = l.length then
-    have := List.findIdx_eq_length.mp h_find_eq_len
-    have := this l[i] (List.getElem_mem hi_lt_len)
-    exact ne_true_of_eq_false this
-  else
-    have h_find_lt_len : l.findIdx p < l.length :=
-      Nat.lt_of_le_of_ne List.findIdx_le_length h_find_eq_len
-    have := ((List.findIdx_eq h_find_lt_len).mp (by rfl)).right i hi_lt_find
-    exact ne_true_of_eq_false this
+/-  This file contains the main proof of RSK and some corollaries.
+    The algorithm for RSK is given in steps, alongside the inverse algorithm and a proof
+    these are indeed eachothers inverse.
+    The steps are
+     - bmpshft_row: An insertion into a single row
+     - bmpshft_row_SSYT: An insertion into a single row in the context of a SSYT
+     - bmpshft_ind: An insertion starting from a certain row. Starting from the top row
+        results in a complete insertion.
+     - bmpshft: A complete insertion
+     - RSK_step: A single step of RSK, this includes the recording tableau.
+     - RSK: Turns a list of integers into two Young tableaux of the same shape.
+
+    Each of these also has its own input and output types.
+    Sometimes extra theorems are proved about, for exmaple about the shape and entries.
+
+    It is also proved that the entries of the insertion tableau are the same as the entries of
+    the list. This gives the version of RSK on permutations as a simple corollary.
+-/
+
+/- ------------------------------------------------------------------------------------------------
+    bmpshft_row
+------------------------------------------------------------------------------------------------ -/
 
 structure bmpshft_row_in where
   row : List Nat
@@ -50,7 +57,7 @@ def bmpshft_row (var : bmpshft_row_in) : bmpshft_row_out :=
   have i_eq : i = row.findIdx? (· > k) := by rfl
   match hi : i with
   | none =>
-    -- Add to the end
+    -- If each entry of the row is smaller or equal to k
     let row' := row ++ [k]
     let k' := none
     have h_wkinc' : IsWeakInc row' := by
@@ -70,6 +77,7 @@ def bmpshft_row (var : bmpshft_row_in) : bmpshft_row_out :=
       dsimp only [k']
       exact op_lt_none_r
     ⟨row', h_wkinc', k', h_notnil', h_leq'⟩
+    -- If there is some entry larger than k
   | some j =>
     have h_eq_some := List.findIdx?_eq_some_iff_getElem.mp hi
     have h_j_lt_len := h_eq_some.choose
@@ -144,8 +152,10 @@ def bmpshft_row (var : bmpshft_row_in) : bmpshft_row_out :=
           exact Nat.ne_zero_of_lt h
     ⟨row', h_wkinc', k', h_notnil', h_leq'⟩
 
-example (a b : Nat) : (some a = some b) ↔ a = b := by exact Option.some_inj
+#eval! bmpshft_row ⟨[1, 2, 4, 5], (by decide), 3⟩
+#eval! bmpshft_row ⟨[1, 2, 4, 5], (by decide), 6⟩
 
+-- The number bumped out of a row was originally in the row.
 theorem bmped_out_in_orig {var : bmpshft_row_in} :
   ∀ (_ : (bmpshft_row var).k' = some k₂'), k₂' ∈ var.row := by
   intro his_some
@@ -156,14 +166,48 @@ theorem bmped_out_in_orig {var : bmpshft_row_in} :
     rw[Option.some_inj] at his_some
     exact List.mem_of_getElem his_some
 
-
-#eval! bmpshft_row ⟨[1, 2, 4, 5], (by simp[IsWeakInc, IsMonotone]), 3⟩
-#eval! bmpshft_row ⟨[1, 2, 4, 5], (by simp[IsWeakInc, IsMonotone]), 6⟩
+-- Describes the entries after an insertion into a row
+-- If k is added at the end, then k is added to the entries
+-- Otherwise, the bumped out number is removed from the entries and k is added.
+theorem bmpshft_row_count {var : bmpshft_row_in} {a : Nat} :
+  (bmpshft_row var).row.count a = match (bmpshft_row var).k' with
+  | none =>
+    (var.row ++ [var.k]).count a
+  | some k' =>
+    (var.row ++ [var.k]).count a - [k'].count a := by
+  let var_out := bmpshft_row var
+  have hvar_out_eq : var_out = bmpshft_row var := by rfl
+  rw[←hvar_out_eq]
+  simp_rw[bmpshft_row] at hvar_out_eq
+  split at hvar_out_eq
+  · case _ =>
+    simp_rw[hvar_out_eq]
+  · case _ hj_eq_some _ =>
+    have hj_lt_len := (List.findIdx?_eq_some_iff_findIdx_eq.mp hj_eq_some).left
+    simp_rw[hvar_out_eq]
+    rw [List.count_singleton, List.count_set hj_lt_len]
+    split
+    · case _ ha_eq_rowj =>
+      have hcounta_ne_zero : var.row.count a ≠ 0 := by
+        rw[←Nat.pos_iff_ne_zero, List.count_pos_iff]
+        rw [beq_iff_eq] at ha_eq_rowj
+        refine List.mem_of_getElem ha_eq_rowj
+      rw[List.count_append, List.count_singleton]
+      split
+      · case _ =>
+        rw[Nat.sub_one_add_one hcounta_ne_zero, Nat.add_one_sub_one]
+      · case _ =>
+        repeat rw[Nat.add_zero]
+    · case _ =>
+      rw[List.count_append, List.count_singleton]
+      repeat rw[Nat.sub_zero]
 
 def bmpshft_row_inv (var : bmpshft_row_out) : bmpshft_row_in :=
   have ⟨row', h_wkinc', k', h_notnil', h_leq'⟩ := var
   match k' with
+  -- If k' is none, then we remove the last entry of the list.
   | none => ⟨row'.dropLast, wkinc_front_wkinc h_wkinc', row'.getLast h_notnil'⟩
+  -- Otherwise, we replace the rightmost number smaller than k' with k'.
   | some k' =>
     let i := row'.findIdx (· ≥ k') - 1
     have hi : i = row'.findIdx (· ≥ k') - 1 := by rfl
@@ -211,13 +255,10 @@ def bmpshft_row_inv (var : bmpshft_row_out) : bmpshft_row_in :=
             omega
     ⟨row, h_wkinc, k⟩
 
-
-example {a : Nat} (h : ¬a > 0) : (a = 0) := Nat.eq_zero_of_not_pos h
-example {a b : Nat} (h : a ≤ b) : (b ≥ a) := by exact String.Pos.Raw.mk_le_mk.mp h
 #eval! bmpshft_row_inv ⟨[1, 2, 4, 5],
-  (by simp[IsWeakInc, IsMonotone]), none, (by simp), (op_lt_none_r)⟩
+  (by decide), none, (by decide), (op_lt_none_r)⟩
 #eval! bmpshft_row_inv ⟨[1, 2, 4, 5],
-  (by simp[IsWeakInc, IsMonotone]), some 5, (by simp), (by rw[op_lt_some]; decide)⟩
+  (by decide), some 5, (by decide), (by rw[op_lt_some]; decide)⟩
 
 @[simp]
 theorem bmpshft_row_left_inverse : Function.LeftInverse bmpshft_row_inv bmpshft_row := by
@@ -249,7 +290,6 @@ theorem bmpshft_row_left_inverse : Function.LeftInverse bmpshft_row_inv bmpshft_
         refine Eq.symm (Nat.eq_sub_of_add_eq' ?_)
         apply Eq.symm
         -- If bmpshft_row manipulated the last element
-        -- We have to prove that row' is less than k
         if h_succj : 1 + j = (row.set j k).length then
           rw [h_succj, List.findIdx_eq_length_of_false]
           intro x hx
@@ -311,7 +351,7 @@ theorem bmpshft_row_right_inverse : Function.RightInverse bmpshft_row_inv bmpshf
   rw [Function.comp_apply, bmpshft_row_inv.eq_def]
   simp only [id_eq]
   split
-  -- If k' = none
+  -- If k' = none, so bmpshft_row_inv removes the rightmost element
   · case h_1 k' _ _ =>
     rw [bmpshft_row]
     have none_find_none : List.findIdx? ((· > row'.getLast h_notnil')) row'.dropLast = none :=
@@ -329,7 +369,7 @@ theorem bmpshft_row_right_inverse : Function.RightInverse bmpshft_row_inv bmpshf
       rw[←hx_getElem]
       rw[decide_eq_false_iff_not, Nat.not_gt_eq]
       exact wkinc_wkinc2.mp h_wkinc' i (row'.length - 1) hi_lt_len' row_len_lt
-    -- Should be replaced with a variant of rw[k'_find_k]
+    -- NOTE: Should be replaced with a variant of rw[k'_find_k]
     split
     · case h_1 =>
       simp only [bmpshft_row_out.mk.injEq, and_true]
@@ -337,7 +377,7 @@ theorem bmpshft_row_right_inverse : Function.RightInverse bmpshft_row_inv bmpshf
     · case h_2 find_eq_some _ _=>
         rw [none_find_none] at find_eq_some
         contradiction
-  -- if k' = some
+  -- if k' = some, so bmpshft_row_inv preforms inverse insertion
   · case h_2 k' h_leq' =>
     let j' := (List.findIdx (· ≥ k') row' - 1)
     have hj'_eq : (List.findIdx (· ≥ k') row' - 1) = j' := by rfl
@@ -355,6 +395,7 @@ theorem bmpshft_row_right_inverse : Function.RightInverse bmpshft_row_inv bmpshf
     have hj'_le_len : j' < row'.length := by
       rw[←hj'_eq]
       exact Nat.sub_one_lt_of_le find_gt_zero List.findIdx_le_length
+    -- The proof that both bmpshft_row and bmpshft_row_inv manipulate the same data.
     have j_find_j : List.findIdx? (· > row'[j']) (row'.set j' k') = some j' := by
       rw[List.findIdx?_eq_some_iff_getElem]
       simp_rw[List.length_set]
@@ -400,7 +441,7 @@ theorem bmpshft_row_right_inverse : Function.RightInverse bmpshft_row_inv bmpshf
     · case h_2 j'₂ _ find_eq_some _ _=>
       rw [j_find_j] at find_eq_some
       have j'₂_eq_j' : j'₂ = j' := ENat.coe_inj.mp find_eq_some
-      -- Basically the same as the left inverse, should be factored out
+      -- NOTE: Basically the same as the left inverse, should be factored out
       simp_rw [j'₂_eq_j', List.getElem_set_self]
       have rows_eq : (row'.set j' k').set j' row'[j'] = row' := by
         apply List.ext_getElem
@@ -421,20 +462,25 @@ theorem bmpshft_row_bi : Function.Bijective bmpshft_row := by
       ⟨bmpshft_row_left_inverse, bmpshft_row_right_inverse⟩
   exact Exists.intro bmpshft_row_inv is_inv
 
-example (a b : Nat) (h_1 : a ≤ b) (h_2 : ¬a = b) : (a < b):= by exact Nat.lt_of_le_of_ne h_1 h_2
-example (a b : Nat) (h_1 : some a = some b) : (a = b) := by exact ENat.coe_inj.mp h_1
-example (a b : Nat) : (a < b) = (b > a) := by exact Eq.propIntro (fun a ↦ a) fun a ↦ a
+/- ------------------------------------------------------------------------------------------------
+    bmpshft_row_SSYT
+------------------------------------------------------------------------------------------------ -/
 
 structure bmpshft_row_SSYT_in where
   cells : Grid
   hSSYT : IsSSYT cells
+  -- The number which we will insert
   k : Nat
+  -- The row in which we insert
   j : Nat
+  -- ≤ because k can also be inserted into a new row.
   hj_le_len : j ≤ cells.length
+  -- This must be true for the element above the new position of k to be smaller than k
   h_col :
     if hj : j = 0 then
       True
     else
+      -- If we insert into an existing row
       if hj_lt_len : j < cells.length then
         have := diagram_decreasing hSSYT (j - 1) j (Nat.sub_one_lt hj) hj_lt_len
         -- There is an element in the row above, which
@@ -446,26 +492,34 @@ structure bmpshft_row_SSYT_in where
           else
             True
       else
+        -- If we insert into a new row
         have := List.length_pos_of_ne_nil (hSSYT.left (j - 1) (by omega)).right
         cells[j - 1][0] < k
-
 
 structure bmpshft_row_SSYT_out where
   cells : Grid
   hSSYT : IsSSYT cells
+  -- The number which was bumped out, if it exists
   k' : Option Nat
+  -- The row where the insertion took place
   j : Nat
   hj_lt_len : j < cells.length
+  -- If we reverse insert k', this must be true in order for k' to be smaller than the entry below.
   h_col :
     match k' with
+      -- If k' is none, we just remove an entry, so row j must be strictly longer
+      -- than the row below.
       | none =>
-        -- Just the assertions that if we remove an element, it stays an Young diagram
         if hj : j + 1 < cells.length then
           cells[j + 1].length < cells[j].length
         else
           True
+      -- If k' is some
       | some k' =>
+        -- Then there exists an element in row j such that
+        -- a) it is smaller than k'
         ∃ (i : Nat) (hi_lt_len : i < cells[j].length), cells[j][i] < k' ∧
+          -- b) the entry below is larger than k' (if the entry below exists)
           if hj : j + 1 < cells.length then
             have := diagram_decreasing hSSYT j (j + 1) (lt_add_one j) hj
             if hi_lt_len : i < cells[j + 1].length then
@@ -478,6 +532,7 @@ structure bmpshft_row_SSYT_out where
 def bmpshft_row_SSYT (var : bmpshft_row_SSYT_in) : bmpshft_row_SSYT_out :=
   have ⟨cells, hSSYT, k, j, hj_le_len, h_col⟩ := var
   if hj_lt_len : j < cells.length then
+    -- If we insert into an exists row of the SSYT
     let var_in : bmpshft_row_in := ⟨cells[j], (hSSYT.left j hj_lt_len).left, k⟩
     let var_out := bmpshft_row var_in
     have hvar_out_eq : var_out = bmpshft_row var_in := by rfl
@@ -489,12 +544,14 @@ def bmpshft_row_SSYT (var : bmpshft_row_SSYT_in) : bmpshft_row_SSYT_out :=
         simp only[bmpshft_row, var_in] at hvar_out_eq
         split at hvar_out_eq
         · case h_1 h_found _ =>
+          -- If k is added at the end
           simp only [hvar_out_eq]
           have wk_inc : IsWeakInc (cells[j] ++ [k]) := by
             have wk_inc := var_out.h_wkinc
             simp only [hvar_out_eq] at wk_inc
             exact wk_inc
           if hj : j = 0 then
+            -- If we insert into the top row
             apply SSYT_append hSSYT
             · exact wk_inc
             · simp[hj]
@@ -524,6 +581,7 @@ def bmpshft_row_SSYT (var : bmpshft_row_SSYT_in) : bmpshft_row_SSYT_out :=
             · apply Or.intro_right
               omega
         · case h_2 i h_found _ _ _ =>
+          -- If we actually inserted an entry
           simp only[hvar_out_eq]
           have ⟨hi_lt_len, find⟩ := List.findIdx?_eq_some_iff_findIdx_eq.mp (Eq.symm h_found)
           apply SSYT_set hSSYT
@@ -616,6 +674,7 @@ def bmpshft_row_SSYT (var : bmpshft_row_SSYT_in) : bmpshft_row_SSYT_out :=
             exact ⟨i, i_lt_len, by rw[List.getElem_set_self]; exact find⟩
     ⟩
   else
+    -- If we inserted into a new row
     ⟨cells ++ [[k]],
       by
         apply SSYT_append_row hSSYT
@@ -635,6 +694,7 @@ def bmpshft_row_SSYT (var : bmpshft_row_SSYT_in) : bmpshft_row_SSYT_out :=
         simp[hj_lt_len]
     ⟩
 
+-- If a number was bumped out, that number was originally in the SSYT
 theorem bmped_out_full_in_orig {var : bmpshft_row_SSYT_in} :
   ∀ (_ : (bmpshft_row_SSYT var).k' = some k₂'), k₂' ∈ entries var.cells := by
   intro his_some
@@ -645,6 +705,7 @@ theorem bmped_out_full_in_orig {var : bmpshft_row_SSYT_in} :
     exact mem_entries_of_mem_row hj_lt_len this
   · contradiction
 
+-- The insertion row in the output is the same as the insertion row of the input
 theorem bmpshft_row_SSYT_j (var : bmpshft_row_SSYT_in) :
   (bmpshft_row_SSYT var).j = var.j := by
   rw[bmpshft_row_SSYT]
@@ -652,12 +713,49 @@ theorem bmpshft_row_SSYT_j (var : bmpshft_row_SSYT_in) :
   · simp
   · simp
 
-theorem switch_if {α : Type} {a : Bool} {b c : α} {p : α → Prop} :
-  p (if a then b else c) = if a then p b else p c := apply_ite p (a = true) b c
+-- Three trivial statements which omega can solve when given like this,
+-- but not in the contexts in which they are used.
+-- NOTE: I need to do something about these
+theorem something {a b c : Nat} : c + (a + b) - a = c + b := by omega
+theorem something₂ {a b c : Nat} (h : a > 0) : c + (a + b - 1) - a = c + b - 1 := by omega
+theorem something₃ {a b c : Nat} : c + (a + b - 0) - a = c + b - 0 := by omega
 
-
--- theorem obviously_false {a b : Nat} (h : a < b) (h₂ : a > b) : False := by
---   omega
+--
+theorem bmpshft_row_SSYT_count {var : bmpshft_row_SSYT_in} {a : Nat} :
+  (entries (bmpshft_row_SSYT var).cells).count a =
+  (match (bmpshft_row_SSYT var).k' with
+  | none =>
+    (entries var.cells ++ [var.k]).count a
+  | some k' =>
+    (entries var.cells ++ [var.k]).count a - [k'].count a) := by
+  let var_out := bmpshft_row_SSYT var
+  have hvar_out_eq : var_out = bmpshft_row_SSYT var := by rfl
+  rw[←hvar_out_eq]
+  rw[bmpshft_row_SSYT] at hvar_out_eq
+  split at hvar_out_eq
+  case _ hj_lt_len =>
+    simp_rw[hvar_out_eq]
+    rw[count_entries_set (hj_lt_len:=hj_lt_len), bmpshft_row_count]
+    simp only
+    repeat rw[List.count_append]
+    split
+    · case _ =>
+      exact something
+    · case _ k' his_some =>
+      nth_rewrite 2 3 [List.count_singleton]
+      split
+      · case _ hk'_eq_a =>
+        rw [beq_iff_eq] at hk'_eq_a
+        have row_count_a_pos : 0 < var.cells[var.j].count a := by
+          have k'_in_row := bmped_out_in_orig his_some
+          rw[←hk'_eq_a]
+          exact List.count_pos_iff.mpr k'_in_row
+        exact something₂ row_count_a_pos
+      · case _ =>
+        rw[something₃]
+  · case _ =>
+    simp_rw[hvar_out_eq]
+    rw[entries_append]
 
 def bmpshft_row_SSYT_inv (var : bmpshft_row_SSYT_out) : bmpshft_row_SSYT_in :=
   have ⟨cells, hSSYT, k', j , hj_lt_len, h_col⟩ := var
@@ -681,6 +779,7 @@ def bmpshft_row_SSYT_inv (var : bmpshft_row_SSYT_out) : bmpshft_row_SSYT_in :=
     (hSSYT.left j hj_lt_len).right,
     h_leq
   ⟩
+  -- The inverse row insertion
   let var_in := bmpshft_row_inv var_out
   have hvar_in_eq : var_in = bmpshft_row_inv var_out := by rfl
   have h_lenj_gt_zero := List.length_pos_of_ne_nil (hSSYT.left j hj_lt_len).right
@@ -702,6 +801,8 @@ def bmpshft_row_SSYT_inv (var : bmpshft_row_SSYT_out) : bmpshft_row_SSYT_in :=
       simp only [bmpshft_row_inv, var_out] at hvar_in_eq
       split at hvar_in_eq
       · case h_1 =>
+        -- If we remove the last entry of the row, it is relatively trivial that the result is a
+        -- SSYT
         simp only [dite_else_true] at h_col
         simp only [hvar_in_eq]
         rw [apply_ite IsSSYT, List.length_dropLast]
@@ -712,6 +813,7 @@ def bmpshft_row_SSYT_inv (var : bmpshft_row_SSYT_out) : bmpshft_row_SSYT_in :=
           else
             simp[hsuccj_len]
       · case h_2 k' hk'_gt_head =>
+        -- Otherwise, it requires slightly more work
         simp only [dite_else_true] at h_col
         simp only [hvar_in_eq]
         rw[List.length_set]
@@ -720,7 +822,8 @@ def bmpshft_row_SSYT_inv (var : bmpshft_row_SSYT_out) : bmpshft_row_SSYT_in :=
         apply SSYT_set hSSYT
         · simp only[hvar_in_eq] at h_wkinc
           exact h_wkinc
-        · split
+        · -- j = 0 or k is larger than the entry above
+          split
           · case _ => trivial
           · case _ hj_pos =>
             simp only
@@ -736,7 +839,8 @@ def bmpshft_row_SSYT_inv (var : bmpshft_row_SSYT_out) : bmpshft_row_SSYT_in :=
               (by omega)
             simp only at hgt_above
             exact Nat.lt_trans hgt_above hk'_gt_k
-        · split
+        · -- k is smaller than the entry above, if it exists
+          split
           · case _ hsuccj_lt_len =>
             split
             · case _ hfind_lt_succlen =>
@@ -874,6 +978,7 @@ def bmpshft_row_SSYT_inv (var : bmpshft_row_SSYT_out) : bmpshft_row_SSYT_in :=
 theorem bmpshft_row_SSYT_inv_j (var : bmpshft_row_SSYT_out) :
   (bmpshft_row_SSYT_inv var).j = var.j := by rfl
 
+-- A rather trivial theorem which is used to get bmpshft_row out of bmpshft_row_var_out.
 theorem switch_bmpshft_row_var_out {var_in h_wkinc h_notnil h_leq} :
   (⟨(bmpshft_row var_in).row,
     h_wkinc,
@@ -888,6 +993,8 @@ theorem switch_bmpshft_row_inv_var_in :
     (bmpshft_row_inv var_out).k⟩ : bmpshft_row_in) = bmpshft_row_inv var_out := by
   rfl
 
+-- The inverses are relatively simple, as we already proved that bmpshft_row is invertable
+-- and we only added the context of a SSYT, but didn't change any other row.
 @[simp]
 theorem bmpshft_row_SSYT_left_inverse :
   ∀ (var : bmpshft_row_SSYT_in), bmpshft_row_SSYT_inv (bmpshft_row_SSYT var) = var := by
@@ -933,6 +1040,8 @@ theorem bmpshft_row_SSYT_right_inverse :
       List.length_eq_zero_iff] at hlen_row_zero
     split at hlen_row_zero
     · case _ =>
+      -- If we inserted into a new list, bmpshft_row_SSYT didn't call bmpshft_row, so we cannot
+      -- use bmpshft_row_right_inverse.
       rw [dite_else_true] at hcol
       simp only at hlen_row_zero
       have h_notnil := (hSSYT.left j hj_lt_len).right
@@ -973,18 +1082,28 @@ theorem bmpshft_row_SSYT_bi : Function.Bijective bmpshft_row_SSYT := by
     · exact bmpshft_row_SSYT_right_inverse
   exact Exists.intro bmpshft_row_SSYT_inv is_inv
 
+/- ------------------------------------------------------------------------------------------------
+    bmpshft_ind
+------------------------------------------------------------------------------------------------ -/
+
+-- We can reuse bmpshft_row_SSYT_in for the input.
+
 structure bmpshft_ind_out where
   cells : Grid
   hSSYT : IsSSYT cells
+  -- The row at which the insertion ended and the inverse insertion will start
   end_row : Nat
   hend_lt_len : end_row < cells.length
   h_col :
-    -- Just the assertions that if we remove an element, it stays an Young diagram
+    -- We will remove and entry from end_row, so it must be longer than the row below (if it exists)
     ∀(hj : end_row + 1 < cells.length),
       cells[end_row + 1].length < cells[end_row].length
+  -- The row at which the insertion started and the inverse insertion will end
   start_row : Nat
+  -- The start row must be above the end row.
   hstart_le_end : start_row ≤ end_row
 
+-- This turns bmpshft_ind_out into bmpshft_row_SSYT_out to start the reverse insertion.
 def row_SSYT_out_of_ind_out (var : bmpshft_ind_out) : bmpshft_row_SSYT_out :=
   ⟨
     var.cells,
@@ -996,6 +1115,10 @@ def row_SSYT_out_of_ind_out (var : bmpshft_ind_out) : bmpshft_row_SSYT_out :=
       simp[var.h_col]
   ⟩
 
+-- If an insertion into a row bumps out an integer, we want to insert this integer into
+-- the next row.
+-- So given an input of bmpshft_row_SSYT_in and the assertion that something will be bumped out,
+-- this function performs the insertion and provides the input for the next insertion.
 def bmpshft_row_in_next (var : bmpshft_row_SSYT_in) (hk : (bmpshft_row_SSYT var).k' = some k) :
   bmpshft_row_SSYT_in :=
   let var_out := bmpshft_row_SSYT var
@@ -1027,6 +1150,7 @@ def bmpshft_row_in_next (var : bmpshft_row_SSYT_in) (hk : (bmpshft_row_SSYT var)
             exact Nat.lt_of_le_of_lt h_inc hji_lt_k
         ⟩
 
+-- If something was bumped out in the row insertion, the shape of the SSYT didn't change.
 @[simp]
 theorem shape_bmpshft_row_in_next (var : bmpshft_row_SSYT_in)
   (hk : (bmpshft_row_SSYT var).k' = some k) :
@@ -1034,7 +1158,7 @@ theorem shape_bmpshft_row_in_next (var : bmpshft_row_SSYT_in)
   simp only [bmpshft_row_in_next, bmpshft_row_SSYT]
   split
   · case _ hj_lt_len =>
-    -- Should maybe be it's own theorem
+    -- Should maybe be its own theorem
     simp only [bmpshft_row]
     split
     · case _ d _ =>
@@ -1051,12 +1175,15 @@ theorem shape_bmpshft_row_in_next (var : bmpshft_row_SSYT_in)
   · case _ hj_ge_len =>
     simp [bmpshft_row_SSYT, hj_ge_len] at hk
 
+-- If something was bumped out in the row insertion, the length of the SSYT didn't change.
 @[simp]
 theorem length_bmpshft_row_in_next (var : bmpshft_row_SSYT_in)
   (hk : (bmpshft_row_SSYT var).k' = some k) :
   (bmpshft_row_in_next var hk).cells.length = var.cells.length := by
   rw[←shape_length_eq_length, shape_bmpshft_row_in_next, shape_length_eq_length]
 
+-- The distance between the row in which we insert and the bottom of the SSYT decreases.
+-- This is a rather trivial statement, but really import for the recursive definitions to terminate
 theorem length_sub_j_decreasing (var : bmpshft_row_SSYT_in)
   (hk : (bmpshft_row_SSYT var).k' = some k) :
   (bmpshft_row_in_next var hk).cells.length - (bmpshft_row_in_next var hk).j <
@@ -1071,11 +1198,12 @@ theorem length_sub_j_decreasing (var : bmpshft_row_SSYT_in)
     rw[bmpshft_row_SSYT] at hk
     simp[hj_eq_len] at hk
 
+-- Does a complete insertion of var.k starting from row var.j.
 def bmpshft_ind (var : bmpshft_row_SSYT_in) : bmpshft_ind_out :=
   let var_out := bmpshft_row_SSYT var
   have hvar_out_eq : var_out = bmpshft_row_SSYT var := by rfl
   match hk : var_out.k' with
-  | none =>
+  | none => -- If the insertion terminated this row
     ⟨var_out.cells,
       var_out.hSSYT,
       var_out.j,
@@ -1088,7 +1216,7 @@ def bmpshft_ind (var : bmpshft_row_SSYT_in) : bmpshft_ind_out :=
       by
         rw[hvar_out_eq, bmpshft_row_SSYT_j]
     ⟩
-  | some k =>
+  | some k => -- If something was bumped out, we need to insert into the next row.
     let out := bmpshft_ind (bmpshft_row_in_next var hk)
     ⟨
       out.cells,
@@ -1105,6 +1233,7 @@ def bmpshft_ind (var : bmpshft_row_SSYT_in) : bmpshft_ind_out :=
   decreasing_by
   exact length_sub_j_decreasing _ _
 
+-- The function outputs the correct starting point for the insertion.
 theorem bmpshft_ind_start (var : bmpshft_row_SSYT_in) :
   (bmpshft_ind var).start_row = var.j := by
   rw[bmpshft_ind]
@@ -1125,254 +1254,16 @@ theorem bmpshft_ind_start (var : bmpshft_row_SSYT_in) :
     · case _ eq_some hj_eq_len =>
       simp[bmpshft_row_SSYT, hj_eq_len] at eq_some
 
-theorem bmpshft_ind_j (var : bmpshft_row_SSYT_in) :
+-- The end row is below the row at which we started.
+theorem bmpshft_ind_end_row (var : bmpshft_row_SSYT_in) :
   (bmpshft_ind var).end_row ≥ var.j := by
-  rw[bmpshft_ind]
-  split
-  · case _ =>
-    simp only [bmpshft_row_SSYT_j, le_refl]
-  · case _ k eq_k =>
-    simp only
-    have := bmpshft_ind_j (bmpshft_row_in_next var eq_k)
-    nth_rewrite 2 [bmpshft_row_in_next] at this
-    simp only [bmpshft_row_SSYT_j] at this
-    omega
-  termination_by var.cells.length - var.j
-  decreasing_by
-  simp_rw[bmpshft_row_in_next, bmpshft_row_SSYT]
-  split
-  · case _ =>
-    simp
-    omega
-  · case _ eq_some hj_eq_len =>
-    simp[bmpshft_row_SSYT, hj_eq_len] at eq_some
+  have := (bmpshft_ind var).hstart_le_end
+  rw[bmpshft_ind_start var] at this
+  exact this
 
-example (a b c : Nat) (h₁ : a ≥ b) (h₂ : b ≥ c) : a ≥ c := by exact Nat.le_trans h₂ h₁
-
-/-- Reverse bmpshft_ind_inv from row bmpshft_ind_out.var_out.j until the row j_start -/
-def bmpshft_ind_inv (var : bmpshft_ind_out) :
-  { ind : bmpshft_row_SSYT_in // ind.j = var.start_row } :=
-  have ⟨cells, hSSYT, end_row, hend_lt_len, h_col, start_row, hstart_le_end⟩ := var
-  if hj : end_row = start_row then
-    ⟨bmpshft_row_SSYT_inv (row_SSYT_out_of_ind_out
-      ⟨cells, hSSYT, end_row, hend_lt_len, h_col, start_row, hstart_le_end⟩),
-      by
-      rw[row_SSYT_out_of_ind_out]
-      simp only
-      rw[bmpshft_row_SSYT_inv_j]
-      exact hj⟩
-  else
-    have hstart_le_end : start_row < end_row := by omega
-    let ind := bmpshft_ind_inv
-      ⟨cells, hSSYT, end_row, hend_lt_len, h_col, start_row + 1, hstart_le_end⟩
-    have hind_eq : ind = bmpshft_ind_inv
-      ⟨cells, hSSYT, end_row, hend_lt_len, h_col, start_row + 1, hstart_le_end⟩ := by rfl
-    have hindj_ne_zero : ind.val.j ≠ 0 := by
-      rw[ind.property]
-      simp only
-      exact Ne.symm (Nat.zero_ne_add_one start_row)
-    have hindj_pos := Nat.zero_lt_of_ne_zero hindj_ne_zero
-    ⟨bmpshft_row_SSYT_inv ⟨
-      ind.val.cells,
-      ind.val.hSSYT,
-      ind.val.k,
-      ind.val.j - 1,
-      by
-        have := ind.val.hj_le_len
-        exact Nat.sub_one_lt_of_le hindj_pos this,
-      by
-        have hsubaddj : ind.val.j - 1 + 1 = ind.val.j := Nat.succ_pred_eq_of_ne_zero hindj_ne_zero
-        simp only [hsubaddj, gt_iff_lt, dite_else_true, exists_and_right]
-        have h_col := ind.val.h_col
-        simp only [hindj_ne_zero, ↓reduceDIte, gt_iff_lt, dite_else_true, exists_and_right] at h_col
-        split at h_col
-        · case _ hj_lt_len =>
-          simp only [hj_lt_len, forall_true_left]
-          exact h_col
-        · case _ hj_eq_len =>
-          simp only [hj_eq_len, IsEmpty.forall_iff, and_true]
-          exact ⟨0, ⟨by
-            have := ind.val.hj_le_len
-            have notnil := (ind.val.hSSYT.left (ind.val.j - 1)
-              (Nat.sub_one_lt_of_le hindj_pos this)).right
-            exact List.length_pos_iff_ne_nil.mpr notnil,
-            h_col⟩⟩
-        ⟩,
-        by
-          simp[bmpshft_row_SSYT_inv_j, ind.property]
-        ⟩
-  termination_by var.cells.length - var.start_row
-  decreasing_by
-    rw[Nat.sub_add_eq]
-    have := hend_lt_len
-    omega
-
--- def bmpshft_ind_inv (var : bmpshft_ind_out) : bmpshft_row_SSYT_in := bmpshft_ind_inv' var
-
-def a : Nat := 2
-
-example (a : Nat) (h : a ≠ 0) : a - 1 + 1 = a := Nat.succ_pred_eq_of_ne_zero h
-
-theorem switch_bmpshft_row_SSYT :
-  ⟨(bmpshft_row_SSYT var).cells,
-  hSSYT,
-  (bmpshft_row_SSYT var).k',
-  (bmpshft_row_SSYT var).j,
-  hj_lt_len,
-  h_col⟩ = bmpshft_row_SSYT var := by rfl
-
-@[simp]
-theorem bmpshft_ind_left_inverse (var : bmpshft_row_SSYT_in) :
-  bmpshft_ind_inv (bmpshft_ind var) = var := by
-  rw[bmpshft_ind]
-  split
-  · case _ hk'_none =>
-    rw[bmpshft_ind_inv]
-    simp only [bmpshft_row_SSYT_j, ↓reduceDIte, row_SSYT_out_of_ind_out]
-    simp_rw[←hk'_none, ←bmpshft_row_SSYT_j]
-    rw[bmpshft_row_SSYT_left_inverse]
-  · case _ k hk'_some =>
-    rw[bmpshft_ind_inv]
-    have not_next_row : (bmpshft_ind (bmpshft_row_in_next var hk'_some)).end_row ≠
-      (bmpshft_row_in_next var hk'_some).j - 1 := by
-      nth_rewrite 2 [bmpshft_row_in_next]
-      simp only [bmpshft_row_SSYT_j]
-      have hj_gt := bmpshft_ind_j (bmpshft_row_in_next var hk'_some)
-      nth_rewrite 2 [bmpshft_row_in_next] at hj_gt
-      simp only [bmpshft_row_SSYT_j] at hj_gt
-      omega
-    simp only [bmpshft_ind_start, not_next_row, ↓reduceDIte]
-    have hstart_pos : (bmpshft_ind (bmpshft_row_in_next var hk'_some)).start_row > 0 := by
-      rw[bmpshft_ind_start]
-      simp[bmpshft_row_in_next]
-    have hbmpshft_ind_out :
-      (⟨
-        (bmpshft_ind (bmpshft_row_in_next var hk'_some)).cells,
-        (bmpshft_ind (bmpshft_row_in_next var hk'_some)).hSSYT,
-        (bmpshft_ind (bmpshft_row_in_next var hk'_some)).end_row,
-        (bmpshft_ind (bmpshft_row_in_next var hk'_some)).hend_lt_len,
-        (bmpshft_ind (bmpshft_row_in_next var hk'_some)).h_col,
-        (bmpshft_ind (bmpshft_row_in_next var hk'_some)).start_row - 1 + 1,
-      by
-        have := (bmpshft_ind (bmpshft_row_in_next var hk'_some)).hstart_le_end
-        omega,
-      ⟩ : bmpshft_ind_out) =
-      bmpshft_ind (bmpshft_row_in_next var hk'_some) := by
-      congr
-      omega
-    have cancel_by_induction :
-      bmpshft_ind_inv ⟨
-        (bmpshft_ind (bmpshft_row_in_next var hk'_some)).cells,
-        (bmpshft_ind (bmpshft_row_in_next var hk'_some)).hSSYT,
-        (bmpshft_ind (bmpshft_row_in_next var hk'_some)).end_row,
-        (bmpshft_ind (bmpshft_row_in_next var hk'_some)).hend_lt_len,
-        (bmpshft_ind (bmpshft_row_in_next var hk'_some)).h_col,
-        (bmpshft_ind (bmpshft_row_in_next var hk'_some)).start_row - 1 + 1,
-      by
-        have := (bmpshft_ind (bmpshft_row_in_next var hk'_some)).hstart_le_end
-        omega,
-      ⟩ = (bmpshft_row_in_next var hk'_some) := by
-      rw[hbmpshft_ind_out]
-      exact bmpshft_ind_left_inverse _
-    simp_rw [cancel_by_induction]
-    simp only [bmpshft_row_in_next, add_tsub_cancel_right]
-    simp_rw[←hk'_some, switch_bmpshft_row_SSYT]
-    exact bmpshft_row_SSYT_left_inverse var
-  termination_by var.cells.length - var.j
-  decreasing_by
-  exact length_sub_j_decreasing _ _
-
-theorem switch_bmpshft_row_SSYT_inv :
-  ⟨(bmpshft_ind_inv var).val.cells,
-    hSSYT,
-    (bmpshft_ind_inv var).val.k,
-    (bmpshft_ind_inv var).val.j,
-    hj_le_len,
-    h_col⟩ = (bmpshft_ind_inv var : bmpshft_row_SSYT_in) := by rfl
-
-@[simp]
-theorem bmpshft_ind_right_inverse (var : bmpshft_ind_out) :
-  bmpshft_ind (bmpshft_ind_inv var) = var := by
-  rw[bmpshft_ind_inv]
-  split
-  · rw[bmpshft_ind]
-    simp only
-    have right_inverse :
-      bmpshft_row_SSYT (bmpshft_row_SSYT_inv (row_SSYT_out_of_ind_out var)) =
-      (row_SSYT_out_of_ind_out var) :=
-      bmpshft_row_SSYT_right_inverse _
-    have is_none :
-      (bmpshft_row_SSYT (bmpshft_row_SSYT_inv (row_SSYT_out_of_ind_out var))).k' = none := by
-      rw[right_inverse, row_SSYT_out_of_ind_out]
-    simp_rw[bmpshft_row_in_next]
-    simp_rw[right_inverse]
-    split
-    · case _ =>
-      congr
-    · case _ is_some =>
-      rw[is_some] at is_none
-      contradiction
-  · simp only
-    rw[bmpshft_ind]
-    repeat simp_rw [bmpshft_row_SSYT_right_inverse]
-    split
-    · case _ is_none =>
-      simp_rw [bmpshft_row_SSYT_right_inverse] at is_none
-      contradiction
-    · case _ k is_some =>
-      simp only [bmpshft_row_in_next]
-      repeat simp_rw [bmpshft_row_SSYT_right_inverse]
-      simp_rw [bmpshft_row_SSYT_right_inverse] at is_some
-      apply ENat.coe_inj.mp at is_some
-      let next_row_output : bmpshft_ind_out :=
-          ⟨var.cells,
-          var.hSSYT,
-          var.end_row,
-          var.hend_lt_len,
-          var.h_col,
-          var.start_row + 1,
-          by
-            have := var.hstart_le_end
-            omega⟩
-      let next_row_input := bmpshft_ind_inv next_row_output
-      have next_row_k : next_row_input.val.k = k := by
-        dsimp[next_row_input]
-        exact is_some
-      have next_row_start_pos :
-        next_row_input.val.j > 0 := by
-        rw[next_row_input.property]
-        simp only [next_row_output]
-        exact Nat.zero_lt_succ var.start_row
-      have some_sub_add := Nat.sub_add_cancel next_row_start_pos
-      have get_bmpshft_ind_inv_out :
-        ⟨next_row_input.val.cells,
-          next_row_input.val.hSSYT,
-          k,
-          next_row_input.val.j - 1 + 1,
-          by
-            have := next_row_input.val.hj_le_len
-            omega,
-          by
-            have h_col := next_row_input.val.h_col
-            simp_rw[some_sub_add]
-            simp only [next_row_k, gt_iff_lt, dite_else_true, exists_and_right,
-              dite_then_true] at h_col
-            simp only [gt_iff_lt, dite_else_true, exists_and_right, dite_then_true]
-            exact h_col⟩
-        = (bmpshft_ind_inv next_row_output : bmpshft_row_SSYT_in) := by
-        simp_rw[some_sub_add, ←next_row_k]
-        dsimp[next_row_input]
-      dsimp[next_row_input, next_row_output] at get_bmpshft_ind_inv_out
-      simp_rw[get_bmpshft_ind_inv_out]
-      have := bmpshft_ind_right_inverse next_row_output
-      dsimp[next_row_output] at this
-      simp_rw [this]
-      congr
-  termination_by var.end_row - var.start_row
-  decreasing_by
-  have := var.hstart_le_end
-  omega
-
+-- If the insertion preformed by bmpshft_ind ended in a new row, the shape of the new SSYT has an
+-- added 1 to the end.
+-- Otherwise, the shape increased by one at the row where the insertion ended.
 theorem shape_bmpshft_ind (var : bmpshft_row_SSYT_in) :
   have var_out := bmpshft_ind var
   shape var_out.cells = if hj_lt_len : var_out.end_row < var.cells.length then
@@ -1412,6 +1303,276 @@ theorem shape_bmpshft_ind (var : bmpshft_row_SSYT_in) :
   decreasing_by
   exact length_sub_j_decreasing _ _
 
+theorem something₄ {a b : Nat} (h : 0 < a) : a + b - 1 + 1 = a + b := by omega
+
+-- An insertion of k into a SSYT just adds k to the entries of the SSYT
+theorem bmpshft_ind_count {a : Nat} :
+  (entries (bmpshft_ind var).cells).count a = (entries var.cells ++ [var.k]).count a := by
+  rw[bmpshft_ind]
+  split
+  · case _ h_eq_none =>
+    rw[bmpshft_row_SSYT_count, h_eq_none]
+  · case _ k' h_eq_some =>
+    rw[bmpshft_ind_count]
+    simp_rw[bmpshft_row_in_next, List.count_append, bmpshft_row_SSYT_count, h_eq_some]
+    rw[List.count_append]
+    nth_rewrite 2 3 [List.count_singleton]
+    split
+    · case _ hk'_eq_a =>
+      rw [beq_iff_eq] at hk'_eq_a
+      have ha_in_entries : 0 < (entries var.cells).count a := by
+        rw[List.count_pos_iff]
+        rw[←hk'_eq_a]
+        exact bmped_out_full_in_orig h_eq_some
+      exact something₄ ha_in_entries
+    · case _ =>
+      rw[add_zero]
+      exact Nat.sub_zero ?_
+  termination_by var.cells.length - var.j
+  decreasing_by
+  exact length_sub_j_decreasing var ?_
+
+/-- Reverse insertion starting from row_end until row_start
+    The function guarentees that the output j is the same as the start row.
+    This is needed to prove the termination of the recursion.
+-/
+def bmpshft_ind_inv (var : bmpshft_ind_out) :
+  { ind : bmpshft_row_SSYT_in // ind.j = var.start_row } :=
+  have ⟨cells, hSSYT, end_row, hend_lt_len, h_col, start_row, hstart_le_end⟩ := var
+  if hj : end_row = start_row then
+    -- If we are at the row where the reverse insertion ends
+    ⟨bmpshft_row_SSYT_inv (row_SSYT_out_of_ind_out
+      ⟨cells, hSSYT, end_row, hend_lt_len, h_col, start_row, hstart_le_end⟩),
+      by
+      rw[row_SSYT_out_of_ind_out]
+      simp only
+      rw[bmpshft_row_SSYT_inv_j]
+      exact hj⟩
+  else
+    have hstart_le_end : start_row < end_row := by omega
+    -- Otherwise, we operate reverse insertion until row_start + 1.
+    let ind := bmpshft_ind_inv
+      ⟨cells, hSSYT, end_row, hend_lt_len, h_col, start_row + 1, hstart_le_end⟩
+    have hind_eq : ind = bmpshft_ind_inv
+      ⟨cells, hSSYT, end_row, hend_lt_len, h_col, start_row + 1, hstart_le_end⟩ := by rfl
+    have hindj_ne_zero : ind.val.j ≠ 0 := by
+      rw[ind.property]
+      simp only
+      exact Ne.symm (Nat.zero_ne_add_one start_row)
+    have hindj_pos := Nat.zero_lt_of_ne_zero hindj_ne_zero
+    ⟨bmpshft_row_SSYT_inv ⟨
+      -- NOTE: this is abstracted behind bmpshft_row_in_next for the forward direction,
+      -- maybe do the same for the inverse?
+      ind.val.cells,
+      ind.val.hSSYT,
+      ind.val.k,
+      ind.val.j - 1,
+      by
+        have := ind.val.hj_le_len
+        exact Nat.sub_one_lt_of_le hindj_pos this,
+      by
+        have hsubaddj : ind.val.j - 1 + 1 = ind.val.j := Nat.succ_pred_eq_of_ne_zero hindj_ne_zero
+        simp only [hsubaddj, gt_iff_lt, dite_else_true, exists_and_right]
+        have h_col := ind.val.h_col
+        simp only [hindj_ne_zero, ↓reduceDIte, gt_iff_lt, dite_else_true, exists_and_right] at h_col
+        split at h_col
+        · case _ hj_lt_len =>
+          simp only [hj_lt_len, forall_true_left]
+          exact h_col
+        · case _ hj_eq_len =>
+          simp only [hj_eq_len, IsEmpty.forall_iff, and_true]
+          exact ⟨0, ⟨by
+            have := ind.val.hj_le_len
+            have notnil := (ind.val.hSSYT.left (ind.val.j - 1)
+              (Nat.sub_one_lt_of_le hindj_pos this)).right
+            exact List.length_pos_iff_ne_nil.mpr notnil,
+            h_col⟩⟩
+        ⟩,
+        by
+          simp[bmpshft_row_SSYT_inv_j, ind.property]
+        ⟩
+  termination_by var.cells.length - var.start_row
+  decreasing_by
+    rw[Nat.sub_add_eq]
+    have := hend_lt_len
+    omega
+
+theorem switch_bmpshft_row_SSYT :
+  ⟨(bmpshft_row_SSYT var).cells,
+  hSSYT,
+  (bmpshft_row_SSYT var).k',
+  (bmpshft_row_SSYT var).j,
+  hj_lt_len,
+  h_col⟩ = bmpshft_row_SSYT var := by rfl
+
+@[simp]
+theorem bmpshft_ind_left_inverse (var : bmpshft_row_SSYT_in) :
+  bmpshft_ind_inv (bmpshft_ind var) = var := by
+  rw[bmpshft_ind]
+  split
+  · case _ hk'_none =>
+    rw[bmpshft_ind_inv]
+    simp only [bmpshft_row_SSYT_j, ↓reduceDIte, row_SSYT_out_of_ind_out]
+    simp_rw[←hk'_none, ←bmpshft_row_SSYT_j]
+    rw[bmpshft_row_SSYT_left_inverse]
+  · case _ k hk'_some =>
+    rw[bmpshft_ind_inv]
+    have not_next_row : (bmpshft_ind (bmpshft_row_in_next var hk'_some)).end_row ≠
+      (bmpshft_row_in_next var hk'_some).j - 1 := by
+      nth_rewrite 2 [bmpshft_row_in_next]
+      simp only [bmpshft_row_SSYT_j]
+      have hj_gt := bmpshft_ind_end_row (bmpshft_row_in_next var hk'_some)
+      nth_rewrite 2 [bmpshft_row_in_next] at hj_gt
+      simp only [bmpshft_row_SSYT_j] at hj_gt
+      omega
+    simp only [bmpshft_ind_start, not_next_row, ↓reduceDIte]
+    have hstart_pos : (bmpshft_ind (bmpshft_row_in_next var hk'_some)).start_row > 0 := by
+      rw[bmpshft_ind_start]
+      simp[bmpshft_row_in_next]
+    -- This is a very long and trivial statement required to rewrite the goal
+    -- this is needed because simp, simp_rw, ... all complained.
+    have hbmpshft_ind_out :
+      (⟨
+        (bmpshft_ind (bmpshft_row_in_next var hk'_some)).cells,
+        (bmpshft_ind (bmpshft_row_in_next var hk'_some)).hSSYT,
+        (bmpshft_ind (bmpshft_row_in_next var hk'_some)).end_row,
+        (bmpshft_ind (bmpshft_row_in_next var hk'_some)).hend_lt_len,
+        (bmpshft_ind (bmpshft_row_in_next var hk'_some)).h_col,
+        (bmpshft_ind (bmpshft_row_in_next var hk'_some)).start_row - 1 + 1,
+      by
+        have := (bmpshft_ind (bmpshft_row_in_next var hk'_some)).hstart_le_end
+        omega,
+      ⟩ : bmpshft_ind_out) =
+      bmpshft_ind (bmpshft_row_in_next var hk'_some) := by
+      -- The very short proof.
+      congr
+      omega
+    have cancel_by_induction :
+      bmpshft_ind_inv ⟨
+        (bmpshft_ind (bmpshft_row_in_next var hk'_some)).cells,
+        (bmpshft_ind (bmpshft_row_in_next var hk'_some)).hSSYT,
+        (bmpshft_ind (bmpshft_row_in_next var hk'_some)).end_row,
+        (bmpshft_ind (bmpshft_row_in_next var hk'_some)).hend_lt_len,
+        (bmpshft_ind (bmpshft_row_in_next var hk'_some)).h_col,
+        (bmpshft_ind (bmpshft_row_in_next var hk'_some)).start_row - 1 + 1,
+      by
+        have := (bmpshft_ind (bmpshft_row_in_next var hk'_some)).hstart_le_end
+        omega,
+      ⟩ = (bmpshft_row_in_next var hk'_some) := by
+      -- another really short proof
+      rw[hbmpshft_ind_out]
+      -- Here, induction is used
+      exact bmpshft_ind_left_inverse _
+    -- Use the massive statement to rewrite the goal
+    simp_rw [cancel_by_induction]
+    simp only [bmpshft_row_in_next, add_tsub_cancel_right]
+    simp_rw[←hk'_some, switch_bmpshft_row_SSYT]
+    exact bmpshft_row_SSYT_left_inverse var
+  termination_by var.cells.length - var.j
+  decreasing_by
+  exact length_sub_j_decreasing _ _
+
+theorem switch_bmpshft_row_SSYT_inv :
+  ⟨(bmpshft_ind_inv var).val.cells,
+    hSSYT,
+    (bmpshft_ind_inv var).val.k,
+    (bmpshft_ind_inv var).val.j,
+    hj_le_len,
+    h_col⟩ = (bmpshft_ind_inv var : bmpshft_row_SSYT_in) := by rfl
+
+@[simp]
+theorem bmpshft_ind_right_inverse (var : bmpshft_ind_out) :
+  bmpshft_ind (bmpshft_ind_inv var) = var := by
+  rw[bmpshft_ind_inv]
+  split
+  · rw[bmpshft_ind] -- If the insertion ends immidiatly
+    simp only
+    have right_inverse :
+      bmpshft_row_SSYT (bmpshft_row_SSYT_inv (row_SSYT_out_of_ind_out var)) =
+      (row_SSYT_out_of_ind_out var) :=
+      bmpshft_row_SSYT_right_inverse _
+    have is_none :
+      (bmpshft_row_SSYT (bmpshft_row_SSYT_inv (row_SSYT_out_of_ind_out var))).k' = none := by
+      rw[right_inverse, row_SSYT_out_of_ind_out]
+    simp_rw[bmpshft_row_in_next, right_inverse]
+    split
+    · case _ =>
+      congr
+    · case _ is_some =>
+      rw[is_some] at is_none
+      contradiction
+  · simp only -- If we recuire recursion
+    rw[bmpshft_ind]
+    repeat simp_rw [bmpshft_row_SSYT_right_inverse]
+    split
+    · case _ is_none =>
+      simp_rw [bmpshft_row_SSYT_right_inverse] at is_none
+      contradiction
+    · case _ k is_some =>
+      simp only [bmpshft_row_in_next]
+      repeat simp_rw [bmpshft_row_SSYT_right_inverse]
+      simp_rw [bmpshft_row_SSYT_right_inverse] at is_some
+      apply ENat.coe_inj.mp at is_some
+      let next_row_output : bmpshft_ind_out :=
+          ⟨var.cells,
+          var.hSSYT,
+          var.end_row,
+          var.hend_lt_len,
+          var.h_col,
+          var.start_row + 1,
+          by
+            have := var.hstart_le_end
+            omega⟩
+      let next_row_input := bmpshft_ind_inv next_row_output
+      have next_row_k : next_row_input.val.k = k := by
+        dsimp[next_row_input]
+        exact is_some
+      have next_row_start_pos :
+        next_row_input.val.j > 0 := by
+        rw[next_row_input.property]
+        simp only [next_row_output]
+        exact Nat.zero_lt_succ var.start_row
+      have some_sub_add := Nat.sub_add_cancel next_row_start_pos
+      -- Again, a really long statement required for rewriting the goal
+      have get_bmpshft_ind_inv_out :
+        ⟨next_row_input.val.cells,
+          next_row_input.val.hSSYT,
+          k,
+          next_row_input.val.j - 1 + 1,
+          by
+            -- These little proofs are required to state the statement.
+            -- They are already in the goal, but I cannot get them out
+            have := next_row_input.val.hj_le_len
+            omega,
+          by
+            -- Same here
+            have h_col := next_row_input.val.h_col
+            simp_rw[some_sub_add]
+            simp only [next_row_k, gt_iff_lt, dite_else_true, exists_and_right,
+              dite_then_true] at h_col
+            simp only [gt_iff_lt, dite_else_true, exists_and_right, dite_then_true]
+            exact h_col⟩
+        = (bmpshft_ind_inv next_row_output : bmpshft_row_SSYT_in) := by
+        -- with a really short proof
+        simp_rw[some_sub_add, ←next_row_k]
+        dsimp[next_row_input]
+      dsimp[next_row_input, next_row_output] at get_bmpshft_ind_inv_out
+      simp_rw[get_bmpshft_ind_inv_out]
+      -- Here, we use recursion
+      have := bmpshft_ind_right_inverse next_row_output
+      dsimp[next_row_output] at this
+      simp_rw [this]
+      congr
+  termination_by var.end_row - var.start_row
+  decreasing_by
+  have := var.hstart_le_end
+  omega
+
+/-  Describes the shape after inverse insertion.
+    If the row in which the inverse insertion started only contains a single element,
+    that row is removed in the new SSYT.
+    Otherwise, the row at which the insertion started is one shorter in the new SSYT
+-/
 theorem shape_bmpshft_ind_inv (var : bmpshft_ind_out) :
   have var_in := (bmpshft_ind_inv var).val
   have := var.hend_lt_len
@@ -1485,22 +1646,26 @@ theorem shape_bmpshft_ind_inv (var : bmpshft_ind_out) :
     simp_rw [←hind_eq] at ih
     exact ih
 
-example (a : Nat) : a + 1 - 1 = a := by exact Nat.add_sub_self_right a 1
-example (a : Nat) (l : List Nat) (h : a < l.length) : l.set a l[a] = l :=
-  List.set_getElem_self h
-
+/- ------------------------------------------------------------------------------------------------
+    bmpshft
+------------------------------------------------------------------------------------------------ -/
 structure bmpshft_in where
   cells : Grid
   hSSYT : IsSSYT cells
+  -- The entry to be inserted.
   k : Nat
 
 structure bmpshft_out where
   cells : Grid
   hSSYT : IsSSYT cells
+  -- The row at which the insertion ended, and the inverse insertion will start.
   j : Nat
   hj_lt_len : j < cells.length
+  -- The row at which the insertion ended is one long than the row below,
+  -- or it is the bottom row.
   hend_col : (h : j + 1 < cells.length) → cells[j+1].length < cells[j].length
 
+-- Converts bmpshft_in to bmpshft_ind_in starting from the top row
 def bmpshft_in_to_bmpshft_row_SSYT_in (var : bmpshft_in) : bmpshft_row_SSYT_in :=
   ⟨var.cells,
     var.hSSYT,
@@ -1510,6 +1675,7 @@ def bmpshft_in_to_bmpshft_row_SSYT_in (var : bmpshft_in) : bmpshft_row_SSYT_in :
     by simp only [↓reduceDIte]
   ⟩
 
+-- A complete insertion is now easily defined.
 def bmpshft (var : bmpshft_in) : bmpshft_out :=
   let out := bmpshft_ind (bmpshft_in_to_bmpshft_row_SSYT_in var)
   ⟨out.cells,
@@ -1522,6 +1688,27 @@ def bmpshft (var : bmpshft_in) : bmpshft_out :=
       exact this
   ⟩
 
+theorem shape_bmpshft (var : bmpshft_in) :
+  let var_out := bmpshft var
+  shape var_out.cells = if var_out.j < var.cells.length then
+    (shape var.cells).modify (var_out.j) (· + 1)
+  else
+    (shape var.cells) ++ [1] := by
+  simp only[bmpshft]
+  exact shape_bmpshft_ind (bmpshft_in_to_bmpshft_row_SSYT_in var)
+
+theorem length_bmpshft_lt_succ (var : bmpshft_in) :
+  var.cells.length + 1 ≥ (bmpshft var).cells.length := by
+  nth_rewrite 2 [←shape_length_eq_length]
+  rw[shape_bmpshft]
+  split
+  · case _ =>
+      rw[List.length_modify, shape_length_eq_length]
+      exact Nat.le_add_right _ 1
+  · case _ =>
+      rw[List.length_append, List.length_singleton, shape_length_eq_length]
+
+-- Converst bmpshft_out to bmpshft_ind_out, starting at row j end going all the way to the top.
 def bmpshft_out_to_bmpshft_ind_out (var : bmpshft_out) : bmpshft_ind_out :=
   ⟨var.cells,
     var.hSSYT,
@@ -1541,7 +1728,18 @@ def bmpshft_inv (var : bmpshft_out) : bmpshft_in :=
     var_in.val.k
   ⟩
 
-example (a : Nat) : (a ≥ 0) := by exact Nat.zero_le a
+theorem shape_bmpshft_inv (var : bmpshft_out) :
+  have := var.hj_lt_len
+  shape (bmpshft_inv var).cells = shape (if var.cells[var.j].length > 1 then
+    var.cells.set var.j var.cells[var.j].dropLast
+  else
+    var.cells.dropLast) := by
+  simp_rw[bmpshft_inv]
+  have := shape_bmpshft_ind_inv (bmpshft_out_to_bmpshft_ind_out var)
+  simp only at this
+  simp_rw [bmpshft_out_to_bmpshft_ind_out.eq_def]
+  simp_rw [bmpshft_out_to_bmpshft_ind_out.eq_def] at this
+  exact this
 
 @[simp]
 theorem bmpshft_left_inverse (var : bmpshft_in) : bmpshft_inv (bmpshft var) = var := by
@@ -1555,7 +1753,7 @@ theorem bmpshft_left_inverse (var : bmpshft_in) : bmpshft_inv (bmpshft var) = va
   let var_in := bmpshft_in_to_bmpshft_row_SSYT_in var
   let var_out : bmpshft_ind_out := bmpshft_ind var_in
   have var_out_eq : var_out = bmpshft_ind (bmpshft_in_to_bmpshft_row_SSYT_in var) := by rfl
-  have poij : ⟨var_out.cells,
+  have switch : ⟨var_out.cells,
     var_out.hSSYT,
     var_out.end_row,
     var_out.hend_lt_len,
@@ -1569,7 +1767,7 @@ theorem bmpshft_left_inverse (var : bmpshft_in) : bmpshft_inv (bmpshft var) = va
   have left_inverse : bmpshft_ind_inv var_out = var_in := by
     rw[var_out_eq]
     exact bmpshft_ind_left_inverse _
-  rw[←poij] at left_inverse
+  rw[←switch] at left_inverse
   congr
   repeat
   · rw[left_inverse]
@@ -1600,50 +1798,15 @@ theorem bmpshft_right_inverse (var : bmpshft_out) : bmpshft (bmpshft_inv var) = 
   · rw[right_inverse]
     simp_rw[var_out, bmpshft_out_to_bmpshft_ind_out]
 
-theorem shape_bmpshft (var : bmpshft_in) :
-  let var_out := bmpshft var
-  shape var_out.cells = if var_out.j < var.cells.length then
-    (shape var.cells).modify (var_out.j) (· + 1)
-  else
-    (shape var.cells) ++ [1] := by
-  simp only[bmpshft]
-  exact shape_bmpshft_ind (bmpshft_in_to_bmpshft_row_SSYT_in var)
-
--- shape var_in.cells = shape (if var.cells[var.end_row].length > 1 then
---     var.cells.set (var.end_row) var.cells[var.end_row].dropLast
---   else
---     var.cells.dropLast)
-
-theorem shape_bmpshft_inv (var : bmpshft_out) :
-  have := var.hj_lt_len
-  shape (bmpshft_inv var).cells = shape (if var.cells[var.j].length > 1 then
-    var.cells.set var.j var.cells[var.j].dropLast
-  else
-    var.cells.dropLast) := by
-  simp_rw[bmpshft_inv]
-  have := shape_bmpshft_ind_inv (bmpshft_out_to_bmpshft_ind_out var)
-  simp only at this
-  simp_rw [bmpshft_out_to_bmpshft_ind_out.eq_def]
-  simp_rw [bmpshft_out_to_bmpshft_ind_out.eq_def] at this
-  exact this
-
-theorem length_bmpshft_lt_succ (var : bmpshft_in) :
-  var.cells.length + 1 ≥ (bmpshft var).cells.length := by
-  nth_rewrite 2 [←shape_length_eq_length]
-  rw[shape_bmpshft]
-  split
-  · case _ =>
-      rw[List.length_modify, shape_length_eq_length]
-      exact Nat.le_add_right _ 1
-  · case _ =>
-      rw[List.length_append, List.length_singleton, shape_length_eq_length]
-
-
 #eval bmpshft ⟨[[1, 2, 2, 3], [2, 3, 4], [5]], by decide, 2⟩
 #eval bmpshft_inv (bmpshft ⟨[[1, 2, 2, 3], [2, 3, 4], [5]], by decide, 2⟩)
 
 #eval bmpshft ⟨[[1, 2, 2, 4], [2, 3, 4], [5]], by decide, 2⟩
 #eval! bmpshft_inv (bmpshft ⟨[[1, 2, 2, 3], [2, 3, 4], [5]], by decide, 2⟩)
+
+/- ------------------------------------------------------------------------------------------------
+    RSK_step
+------------------------------------------------------------------------------------------------ -/
 
 structure SSYT_SYT_pair where
   P : Grid
@@ -1659,8 +1822,6 @@ structure RSK_step_in where
 structure RSK_step_out where
   pair : SSYT_SYT_pair
   hnot_nil : pair.P ≠ []
-
-example (a : Nat) (h : a > 0) : (a > a - 1) := by exact Nat.sub_one_lt_of_lt h
 
 def RSK_step (var : RSK_step_in) : RSK_step_out :=
   have ⟨k, ⟨P, Q, hSSYT, hSYT, hShape⟩⟩ := var
@@ -1701,6 +1862,9 @@ def RSK_step (var : RSK_step_in) : RSK_step_out :=
   hSSYT₂,
   SYT_add hSYT j h_col,
   by
+    -- The proof that both are the same shape
+    -- NOTE: it takes quite a lot of effort to describe the shape of the recording tableau,
+    -- maybe that should be a seperate theorem
     rw[←hstep_eq] at shapeP₂
     simp only at shapeP₂
     rw[SYT_add_cells]
@@ -1710,7 +1874,6 @@ def RSK_step (var : RSK_step_in) : RSK_step_out :=
       simp only [j_lt_len_Q, ↓reduceIte] at shapeP₂
       rw[shapeP₂]
       apply List.ext_getElem
-      -- This is a lot of lines for something so trivial
       · rw[List.length_modify, shape_length_eq_length, shape_length_eq_length, List.length_set]
         exact length_eq_of_shape_eq hShape
       · intro i hi₁ hi₂
@@ -1770,6 +1933,24 @@ def RSK_step (var : RSK_step_in) : RSK_step_out :=
     simp only
     exact List.length_pos_iff.mp (Nat.zero_lt_of_lt hj_lt_lenP₂)
   ⟩
+
+-- Inserting k into the insertion tableau adds k to the entries
+theorem RSK_step_count {a : Nat} :
+  (entries (RSK_step var).pair.P).count a = (entries var.pair.P ++ [var.k]).count a := by
+  rw[RSK_step]
+  exact bmpshft_ind_count
+
+theorem RSK_step_entries :
+  (entries (RSK_step var).pair.P).Perm (entries var.pair.P ++ [var.k]) := by
+  rw[List.perm_iff_count]
+  intro a
+  exact RSK_step_count
+
+-- After an insertion, the insertiontableau is one larger.
+theorem RSK_step_size :
+  size (RSK_step var).pair.P = size var.pair.P + 1 := by
+  repeat rw[←size_eq_entries_len]
+  rw[List.Perm.length_eq RSK_step_entries, List.length_append, List.length_singleton]
 
 def RSK_step_inv (pair : RSK_step_out) : RSK_step_in :=
   have ⟨⟨P, Q, hSSYT, hSYT, hshape⟩, hPnot_nil⟩ := pair
@@ -1853,7 +2034,7 @@ theorem RSK_step_right_inverse (out : RSK_step_out) :
 @[simp]
 theorem RSK_step_left_inverse (var : RSK_step_in) :
   RSK_step_inv (RSK_step var) = var := by
-  -- MASSIVE CODE DUBLICATION FROM HERE
+  -- NOTE: MASSIVE CODE DUBLICATION FROM HERE
   have ⟨k, ⟨P, Q, hSSYT, hSYT, hShape⟩⟩ := var
   let step := bmpshft ⟨P, hSSYT, k⟩
   have hstep_eq : step = bmpshft ⟨P, hSSYT, k⟩ := by rfl
@@ -1901,137 +2082,19 @@ theorem RSK_step_left_inverse (var : RSK_step_in) :
   congr
   exact SYT_add_left_inverse hSYT j hj_le_lenQ h_col
 
-theorem bmpshft_row_count {var : bmpshft_row_in} {a : Nat} :
-  (bmpshft_row var).row.count a = match (bmpshft_row var).k' with
-  | none =>
-    (var.row ++ [var.k]).count a
-  | some k' =>
-    (var.row ++ [var.k]).count a - [k'].count a := by
-  let var_out := bmpshft_row var
-  have hvar_out_eq : var_out = bmpshft_row var := by rfl
-  rw[←hvar_out_eq]
-  simp_rw[bmpshft_row] at hvar_out_eq
-  split at hvar_out_eq
-  · case _ =>
-    simp_rw[hvar_out_eq]
-  · case _ hj_eq_some _ =>
-    have hj_lt_len := (List.findIdx?_eq_some_iff_findIdx_eq.mp hj_eq_some).left
-    simp_rw[hvar_out_eq]
-    rw [List.count_singleton, List.count_set hj_lt_len]
-    split
-    · case _ ha_eq_rowj =>
-      have hcounta_ne_zero : var.row.count a ≠ 0 := by
-        rw[←Nat.pos_iff_ne_zero, List.count_pos_iff]
-        rw [beq_iff_eq] at ha_eq_rowj
-        refine List.mem_of_getElem ha_eq_rowj
-      rw[List.count_append, List.count_singleton]
-      split
-      · case _ =>
-        rw[Nat.sub_one_add_one hcounta_ne_zero, Nat.add_one_sub_one]
-      · case _ =>
-        repeat rw[Nat.add_zero]
-    · case _ =>
-      rw[List.count_append, List.count_singleton]
-      repeat rw[Nat.sub_zero]
-
-theorem something {a b c : Nat} : c + (a + b) - a = c + b := by omega
-theorem something₂ {a b c : Nat} (h : a > 0) : c + (a + b - 1) - a = c + b - 1 := by omega
-theorem something₃ {a b c : Nat} : c + (a + b - 0) - a = c + b - 0 := by omega
-
-theorem bmpshft_row_SSYT_count {var : bmpshft_row_SSYT_in} {a : Nat} :
-  (entries (bmpshft_row_SSYT var).cells).count a =
-  (match (bmpshft_row_SSYT var).k' with
-  | none =>
-    (entries var.cells ++ [var.k]).count a
-  | some k' =>
-    (entries var.cells ++ [var.k]).count a - [k'].count a) := by
-  let var_out := bmpshft_row_SSYT var
-  have hvar_out_eq : var_out = bmpshft_row_SSYT var := by rfl
-  rw[←hvar_out_eq]
-  rw[bmpshft_row_SSYT] at hvar_out_eq
-  split at hvar_out_eq
-  case _ hj_lt_len =>
-    simp_rw[hvar_out_eq]
-    rw[count_entries_set (hj_lt_len:=hj_lt_len), bmpshft_row_count]
-    simp only
-    repeat rw[List.count_append]
-    split
-    · case _ =>
-      -- AGAIN, WHAT?
-      exact something
-    · case _ k' his_some =>
-      nth_rewrite 2 3 [List.count_singleton]
-      split
-      · case _ hk'_eq_a =>
-        rw [beq_iff_eq] at hk'_eq_a
-        have row_count_a_pos : 0 < var.cells[var.j].count a := by
-          have k'_in_row := bmped_out_in_orig his_some
-          rw[←hk'_eq_a]
-          exact List.count_pos_iff.mpr k'_in_row
-        exact something₂ row_count_a_pos
-      · case _ =>
-        rw[something₃]
-  · case _ =>
-    simp_rw[hvar_out_eq]
-    rw[entries_append]
-
-example (a b : Nat) : a + b - 0 = a + b := by exact?
-theorem something₄ {a b : Nat} (h : 0 < a) : a + b - 1 + 1 = a + b := by omega
-
-theorem bmpshft_ind_count {a : Nat} :
-  (entries (bmpshft_ind var).cells).count a = (entries var.cells ++ [var.k]).count a := by
-  rw[bmpshft_ind]
-  split
-  · case _ h_eq_none =>
-    rw[bmpshft_row_SSYT_count, h_eq_none]
-  · case _ k' h_eq_some =>
-    rw[bmpshft_ind_count]
-    simp_rw[bmpshft_row_in_next, List.count_append, bmpshft_row_SSYT_count, h_eq_some]
-    rw[List.count_append]
-    nth_rewrite 2 3 [List.count_singleton]
-    split
-    · case _ hk'_eq_a =>
-      rw [beq_iff_eq] at hk'_eq_a
-      have ha_in_entries : 0 < (entries var.cells).count a := by
-        rw[List.count_pos_iff]
-        rw[←hk'_eq_a]
-        exact bmped_out_full_in_orig h_eq_some
-      exact something₄ ha_in_entries
-    · case _ =>
-      rw[add_zero]
-      exact Nat.sub_zero ?_
-  termination_by var.cells.length - var.j
-  decreasing_by
-  exact length_sub_j_decreasing var ?_
-
-theorem RSK_step_count {a : Nat} :
-  (entries (RSK_step var).pair.P).count a = (entries var.pair.P ++ [var.k]).count a := by
-  rw[RSK_step]
-  exact bmpshft_ind_count
-
-theorem RSK_step_entries :
-  (entries (RSK_step var).pair.P).Perm (entries var.pair.P ++ [var.k]) := by
-  rw[List.perm_iff_count]
-  intro a
-  exact RSK_step_count
-
-theorem RSK_step_size :
-  size (RSK_step var).pair.P = size var.pair.P + 1 := by
-  repeat rw[←size_eq_entries_len]
-  rw[List.Perm.length_eq RSK_step_entries, List.length_append, List.length_singleton]
-
+-- combines RSK_step_size with the invertibility to prove that an inverse insertion
+-- results in an insertion tableau of one size less.
 theorem RSK_step_inv_size :
   size (RSK_step_inv var).pair.P = size var.pair.P - 1 := by
   rw[←(RSK_step_right_inverse var), RSK_step_size, RSK_step_right_inverse]
   exact Nat.eq_sub_of_add_eq rfl
 
+-- Recursively defined RSK on a list.
 def RSK (l : List Nat) : SSYT_SYT_pair :=
   match l with
   | [] => ⟨[], [], by decide, by decide, by decide⟩
   | a :: as =>
     (RSK_step ⟨a, RSK as⟩).pair
-
-example (a : Nat) (h : a > 0) : a - 1 < a := by exact Nat.sub_one_lt_of_lt h
 
 def RSK_inv (pair : SSYT_SYT_pair) : List Nat :=
   if hnot_nil : pair.P ≠ [] then
@@ -2063,7 +2126,7 @@ theorem RSK_right_inverse (pair : SSYT_SYT_pair) :
   decreasing_by
   simp_rw[RSK_step_inv_size]
   exact Nat.sub_one_lt_of_lt (size_pos_of_not_nill pair.hSSYT (by
-    -- Ugly, but I don't know how to get hnot_nil
+    -- NOTE: Ugly, but I don't know how to get hnot_nil
     expose_names
     exact h_1))
 
@@ -2093,7 +2156,7 @@ theorem RSK_bijective : Function.Bijective RSK := by
     intro var
     exact RSK_right_inverse var
 
-
+-- If a appears n times in the list, it appears n times in the insertion tableau
 theorem RSK_count {a : Nat} :
   (entries (RSK l).P).count a = l.count a := by
   rw[RSK.eq_def]
@@ -2109,12 +2172,14 @@ theorem RSK_inv_count {a : Nat} :
   rw[RSK_right_inverse] at this
   exact Eq.symm this
 
+-- The entries of the list and the insertion tableau are equal.
 theorem RSK_entries (l : List Nat) :
   (entries (RSK l).P).Perm l := by
   rw[List.perm_iff_count]
   intro a
   exact RSK_count
 
+-- The entries of the insertion tableau and the list are equal.
 theorem RSK_inv_entries (pair : SSYT_SYT_pair) :
   (RSK_inv pair).Perm (entries pair.P) := by
   have := RSK_entries (RSK_inv pair)
@@ -2139,6 +2204,7 @@ theorem RSK_inv_size :
 #eval RSK [1, 2, 4, 0]
 #eval RSK_inv ⟨[[1, 2, 3], [4, 5]], [[0, 1, 2], [3, 4]], by decide, by decide, by decide⟩
 
+-- if l is just the entries 0, 1, 2... then the insertion tableau is a SYT.
 theorem Perm_RSK_SYT (l : List Nat) (hPerm : l.Perm (List.range l.length)) :
   IsSYT (RSK l).P := by
   constructor
@@ -2161,6 +2227,8 @@ structure SYT_SYT_pair (n : Nat) where
 def SSYT_SYT_pair_of_SYT_SYT_pair (pair : SYT_SYT_pair n) : SSYT_SYT_pair :=
   ⟨pair.P, pair.Q, SYT_SSYT pair.hSYT_P, pair.hSYT_Q, pair.hShape⟩
 
+
+-- A permutation is a list containing the entries 0, 1, 2, ... exactly once.
 structure Perm (n : Nat) where
   l : List Nat
   h_perm : l.Perm (List.range n)
@@ -2170,6 +2238,7 @@ theorem Perm_len (perm : Perm n) : perm.l.length = n := by
   rw[List.length_range] at this
   exact this
 
+-- RSK from a permutation to a pairs of SYTs
 def RSK₂ (perm : Perm n) : SYT_SYT_pair n :=
   have len := Perm_len perm
   ⟨
@@ -2192,7 +2261,7 @@ def RSK₂_inv (pair : SYT_SYT_pair n) : Perm n :=
     exact this
   ⟩
 
-theorem swap_pair :
+theorem switch_pair :
   (⟨(RSK l).P,
     (RSK l).Q,
     hSSYT,
@@ -2203,7 +2272,7 @@ theorem swap_pair :
 theorem RSK₂_left_inverse :
   ∀(var : Perm n), RSK₂_inv (RSK₂ var) = var := by
   intro var
-  simp_rw[RSK₂, RSK₂_inv, SSYT_SYT_pair_of_SYT_SYT_pair, swap_pair, RSK_left_inverse]
+  simp_rw[RSK₂, RSK₂_inv, SSYT_SYT_pair_of_SYT_SYT_pair, switch_pair, RSK_left_inverse]
 
 theorem RSK₂_right_inverse :
   ∀(var : SYT_SYT_pair n), RSK₂ (RSK₂_inv var) = var := by
